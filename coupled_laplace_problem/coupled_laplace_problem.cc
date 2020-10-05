@@ -458,8 +458,8 @@ private:
   Vector<double> system_rhs;
   Vector<double> dummy_vector;
 
-  CouplingParamters  parameters;
-  const unsigned int interface_boundary_id;
+  CouplingParamters                               parameters;
+  const unsigned int                              interface_boundary_id;
   Adapter<dim, Vector<double>, CouplingParamters> adapter;
 };
 
@@ -510,7 +510,7 @@ template <int dim>
 LaplaceProblem<dim>::LaplaceProblem()
   : fe(1)
   , dof_handler(triangulation)
-  , interface_boundary_id(0)
+  , interface_boundary_id(3)
   , adapter(parameters, interface_boundary_id)
 {}
 
@@ -519,7 +519,7 @@ template <int dim>
 void
 LaplaceProblem<dim>::make_grid()
 {
-  GridGenerator::hyper_cube(triangulation, -1, 1, false);
+  GridGenerator::hyper_cube(triangulation, -1, 1, true);
   triangulation.refine_global(3);
 
   std::cout << "   Number of active cells: " << triangulation.n_active_cells()

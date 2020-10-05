@@ -1,5 +1,5 @@
 ##
-#  CMake script for the step-75 tutorial program:
+#  CMake script for the coupled laplace problem tutorial program:
 ##
 
 # Set the name of the project and target:
