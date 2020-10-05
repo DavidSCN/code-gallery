@@ -53,11 +53,11 @@ using namespace dealii;
 
 struct CouplingParamters
 {
-  std::string config_file      = "precice-config.xml";
-  std::string participant_name = "laplace-solver";
-  std::string mesh_name        = "original-mesh";
-  std::string write_data_name  = "dummy";
-  std::string read_data_name   = "boundary-data";
+  const std::string config_file      = "precice-config.xml";
+  const std::string participant_name = "laplace-solver";
+  const std::string mesh_name        = "original-mesh";
+  const std::string write_data_name  = "dummy";
+  const std::string read_data_name   = "boundary-data";
 };
 
 
@@ -328,9 +328,12 @@ Adapter<dim, VectorType, ParameterClass>::initialize(
                                    write_data.data());
 
       precice.markActionFulfilled(precice::constants::actionWriteInitialData());
-
-      precice.initializeData();
     }
+
+  // TODO: Discuss position of this function: inside the if statement leads to a
+  // precice error, because no initial data is required, but it needs to be
+  // initialized
+  precice.initializeData();
 
   // read initial readData from preCICE if required for the first time step
   // FIXME: Data is already exchanged here
@@ -340,6 +343,15 @@ Adapter<dim, VectorType, ParameterClass>::initialize(
                                   n_interface_nodes,
                                   interface_nodes_ids.data(),
                                   read_data.data());
+
+      // This is the opposite direction as above. See comment there.
+      auto dof_component = data.begin();
+      for (int i = 0; i < n_interface_nodes; ++i)
+        {
+          AssertIndexRange(i, read_data.size());
+          data[dof_component->first] = read_data[i];
+          ++dof_component;
+        }
 
       format_precice_to_deal(precice_to_deal);
     }
@@ -377,10 +389,7 @@ Adapter<dim, VectorType, ParameterClass>::advance(
   // Here, we obtain data from another participant. Again, we insert the
   // data in our global vector by calling format_precice_to_deal
 
-  // FIXME: isReadDataAvailable returns false, though it should be true for
-  // participant b
-  if (precice.hasData(read_data_name, mesh_id))
-    //      if (precice.isReadDataAvailable())
+  if (precice.isReadDataAvailable())
     {
       precice.readBlockScalarData(read_data_id,
                                   n_interface_nodes,
@@ -537,15 +546,14 @@ void
 LaplaceProblem<dim>::make_grid()
 {
   GridGenerator::hyper_cube(triangulation, -1, 1);
-  triangulation.refine_global(3);
+  triangulation.refine_global(4);
 
   for (const auto &cell : triangulation.active_cell_iterators())
     for (auto f : GeometryInfo<dim>::face_indices())
       {
         const auto face = cell->face(f);
 
-        //        if (face->at_boundary() && (std::abs(face->center()[0] - 1) <
-        //        1e-12))
+        // boundary in positive x direction
         if (face->at_boundary() && (face->center()[0] == 1))
           face->set_boundary_id(interface_boundary_id);
       }

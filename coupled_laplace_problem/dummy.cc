@@ -9,8 +9,8 @@
 int
 main()
 {
-  int commRank = 0;
-  int commSize = 1;
+  const int commRank = 0;
+  const int commSize = 1;
 
   using namespace precice;
   using namespace precice::constants;
@@ -27,12 +27,17 @@ main()
 
   SolverInterface interface(solverName, configFileName, commRank, commSize);
 
-  int meshID           = interface.getMeshID(meshName);
-  int dimensions       = interface.getDimensions();
-  int numberOfVertices = 10;
+  const int meshID           = interface.getMeshID(meshName);
+  const int dimensions       = interface.getDimensions();
+  const int numberOfVertices = 6;
 
-  const int readDataID  = interface.getDataID(dataReadName, meshID);
-  const int writeDataID = interface.getDataID(dataWriteName, meshID);
+
+  const int readDataID = interface.hasData(dataReadName, meshID) ?
+                           interface.getDataID(dataReadName, meshID) :
+                           -1;
+  const int writeDataID = interface.hasData(dataWriteName, meshID) ?
+                            interface.getDataID(dataWriteName, meshID) :
+                            -1;
 
   std::vector<double> readData(numberOfVertices);
   std::vector<double> writeData(numberOfVertices);
@@ -51,11 +56,13 @@ main()
             vertices[index] = 1 - deltaX * i;
         }
 
-      readData[i]  = 0;
-      writeData[i] = 2;
+      if (i == 0)
+        writeData[i] = 2;
+      else if (i == numberOfVertices - 1)
+        writeData[i] = 2;
+      else
+        writeData[i] = (double)(rand() % 20) / 20.;
     }
-  //  for(uint i=0;i<vertices.size();++i)
-  //    std::cout<<vertices[i]<<std::endl;
 
   interface.setMeshVertices(meshID,
                             numberOfVertices,
@@ -65,29 +72,24 @@ main()
 
   double dt = interface.initialize();
 
+  if (interface.isActionRequired(actionWriteInitialData()))
+    {
+      std::cout << "DUMMY: Writing initial data \n";
+      interface.writeBlockScalarData(writeDataID,
+                                     numberOfVertices,
+                                     vertexIDs.data(),
+                                     writeData.data());
+
+      interface.markActionFulfilled(actionWriteInitialData());
+
+      interface.initializeData();
+    }
+
   while (interface.isCouplingOngoing())
     {
-      if (interface.isActionRequired(actionWriteIterationCheckpoint()))
-        {
-          std::cout << "DUMMY: Writing iteration checkpoint\n";
-          interface.markActionFulfilled(actionWriteIterationCheckpoint());
-        }
-
-      if (interface.isReadDataAvailable())
-        {
-          interface.readBlockScalarData(readDataID,
-                                        numberOfVertices,
-                                        vertexIDs.data(),
-                                        readData.data());
-        }
-
-      for (int i = 0; i < numberOfVertices; i++)
-        {
-          std::cout << readData[i] << std::endl;
-        }
-
       if (interface.isWriteDataRequired(dt))
         {
+          std::cout << "DUMMY: Writing coupling data \n";
           interface.writeBlockScalarData(writeDataID,
                                          numberOfVertices,
                                          vertexIDs.data(),
@@ -95,17 +97,19 @@ main()
         }
 
       dt = interface.advance(dt);
+      std::cout << "DUMMY: Advancing in time\n";
 
-      if (interface.isActionRequired(actionReadIterationCheckpoint()))
+      // FIXME: Should retun false
+      if (interface.isReadDataAvailable() && false)
         {
-          std::cout << "DUMMY: Reading iteration checkpoint\n";
-          interface.markActionFulfilled(actionReadIterationCheckpoint());
-        }
-      else
-        {
-          std::cout << "DUMMY: Advancing in time\n";
+          std::cout << "DUMMY: Reading coupling data \n";
+          interface.readBlockScalarData(readDataID,
+                                        numberOfVertices,
+                                        vertexIDs.data(),
+                                        readData.data());
         }
     }
+
 
   interface.finalize();
   std::cout << "DUMMY: Closing C++ solver dummy...\n";

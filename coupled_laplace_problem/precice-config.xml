@@ -9,7 +9,6 @@
     <solver-interface dimensions="2">
 
    <data:scalar name="boundary-data"/>
-    <data:scalar name="dummy"/>
 
     <mesh name="original-mesh">
         <use-data name="boundary-data"/>
@@ -17,19 +16,17 @@
 
     <mesh name="dummy-mesh">
     <use-data name="boundary-data"/>
-    <use-data name="dummy"/>
     </mesh>
 
     <participant name="laplace-solver">
         <use-mesh name="original-mesh" provide="yes"/>
         <use-mesh name="dummy-mesh" from="dummy-participant"/>
         <read-data name="boundary-data" mesh="original-mesh"/>
-        <mapping:nearest-neighbor direction="read" from="dummy-mesh" to="original-mesh" constraint="consistent" />
+        <mapping:rbf-thin-plate-splines direction="read" from="dummy-mesh" to="original-mesh" constraint="consistent" x-dead="true"/>
     </participant>
 
     <participant name="dummy-participant">
         <use-mesh name="dummy-mesh" provide="yes"/>
-        <read-data name="dummy" mesh="dummy-mesh"/>
         <write-data name="boundary-data" mesh="dummy-mesh"/>
     </participant>
 
@@ -37,9 +34,9 @@
 
     <coupling-scheme:serial-explicit>
         <time-window-size value="1"/>
-        <max-time value="2"/>
+        <max-time value="1"/>
         <participants first="laplace-solver" second="dummy-participant"/>
-        <exchange data="boundary-data" mesh="dummy-mesh" from="dummy-participant" to="laplace-solver" />
+        <exchange data="boundary-data" mesh="dummy-mesh" from="dummy-participant" to="laplace-solver" initialize="true"/>
     </coupling-scheme:serial-explicit>
 
     </solver-interface>
