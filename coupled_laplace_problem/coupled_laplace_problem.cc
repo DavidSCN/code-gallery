@@ -56,8 +56,8 @@ struct CouplingParamters
   std::string config_file      = "precice-config.xml";
   std::string participant_name = "laplace-solver";
   std::string mesh_name        = "original-mesh";
-  std::string write_data_name  = "solution";
-  std::string read_data_name   = "dummy";
+  std::string write_data_name  = "dummy";
+  std::string read_data_name   = "boundary-data";
 };
 
 
@@ -106,9 +106,10 @@ public:
    *             participants.
    */
   void
-  initialize(const DoFHandler<dim> &dof_handler,
-             const VectorType &     deal_to_precice,
-             VectorType &           precice_to_deal);
+  initialize(const DoFHandler<dim> &                    dof_handler,
+             const VectorType &                         deal_to_precice,
+             VectorType &                               precice_to_deal,
+             std::map<types::global_dof_index, double> &data);
 
   /**
    * @brief      Advances preCICE after every timestep, converts data formats
@@ -124,9 +125,10 @@ public:
    *             the solver.
    */
   void
-  advance(const VectorType &deal_to_precice,
-          VectorType &      precice_to_deal,
-          const double      computed_timestep_length);
+  advance(const VectorType &                         deal_to_precice,
+          VectorType &                               precice_to_deal,
+          const double                               computed_timestep_length,
+          std::map<types::global_dof_index, double> &data);
 
   /**
    * @brief public precice solverinterface
@@ -230,9 +232,10 @@ Adapter<dim, VectorType, ParameterClass>::~Adapter()
 template <int dim, typename VectorType, typename ParameterClass>
 void
 Adapter<dim, VectorType, ParameterClass>::initialize(
-  const DoFHandler<dim> &dof_handler,
-  const VectorType &     deal_to_precice,
-  VectorType &           precice_to_deal)
+  const DoFHandler<dim> &                    dof_handler,
+  const VectorType &                         deal_to_precice,
+  VectorType &                               precice_to_deal,
+  std::map<types::global_dof_index, double> &data)
 {
   Assert(dim > 1, ExcNotImplemented());
   Assert(dim == precice.getDimensions(), ExcInternalError());
@@ -257,6 +260,9 @@ Adapter<dim, VectorType, ParameterClass>::initialize(
                                   ComponentMask(),
                                   coupling_dofs,
                                   couplingBoundary);
+
+  for (auto i : coupling_dofs)
+    data.insert(std::pair<types::global_dof_index, double>(i, 0));
 
   // Comment about scalar problems
 
@@ -344,9 +350,10 @@ Adapter<dim, VectorType, ParameterClass>::initialize(
 template <int dim, typename VectorType, typename ParameterClass>
 void
 Adapter<dim, VectorType, ParameterClass>::advance(
-  const VectorType &deal_to_precice,
-  VectorType &      precice_to_deal,
-  const double      computed_timestep_length)
+  const VectorType &                         deal_to_precice,
+  VectorType &                               precice_to_deal,
+  const double                               computed_timestep_length,
+  std::map<types::global_dof_index, double> &data)
 {
   // This is essentially the same as during initialization
   // We have already all IDs and just need to convert our obtained data to
@@ -379,6 +386,14 @@ Adapter<dim, VectorType, ParameterClass>::advance(
                                   n_interface_nodes,
                                   interface_nodes_ids.data(),
                                   read_data.data());
+
+      auto dof_component = data.begin();
+      for (int i = 0; i < n_interface_nodes; ++i)
+        {
+          AssertIndexRange(i, read_data.size());
+          data[dof_component->first] = read_data[i];
+          ++dof_component;
+        }
 
       format_precice_to_deal(precice_to_deal);
     }
@@ -454,9 +469,11 @@ private:
   SparsityPattern      sparsity_pattern;
   SparseMatrix<double> system_matrix;
 
-  Vector<double> solution;
-  Vector<double> system_rhs;
-  Vector<double> dummy_vector;
+  Vector<double>                            solution;
+  Vector<double>                            system_rhs;
+  Vector<double>                            dummy_vector;
+  std::map<types::global_dof_index, double> boundary_data;
+
 
   CouplingParamters                               parameters;
   const unsigned int                              interface_boundary_id;
@@ -510,7 +527,7 @@ template <int dim>
 LaplaceProblem<dim>::LaplaceProblem()
   : fe(1)
   , dof_handler(triangulation)
-  , interface_boundary_id(3)
+  , interface_boundary_id(1)
   , adapter(parameters, interface_boundary_id)
 {}
 
@@ -519,8 +536,19 @@ template <int dim>
 void
 LaplaceProblem<dim>::make_grid()
 {
-  GridGenerator::hyper_cube(triangulation, -1, 1, true);
+  GridGenerator::hyper_cube(triangulation, -1, 1);
   triangulation.refine_global(3);
+
+  for (const auto &cell : triangulation.active_cell_iterators())
+    for (auto f : GeometryInfo<dim>::face_indices())
+      {
+        const auto face = cell->face(f);
+
+        //        if (face->at_boundary() && (std::abs(face->center()[0] - 1) <
+        //        1e-12))
+        if (face->at_boundary() && (face->center()[0] == 1))
+          face->set_boundary_id(interface_boundary_id);
+      }
 
   std::cout << "   Number of active cells: " << triangulation.n_active_cells()
             << std::endl
@@ -603,16 +631,23 @@ LaplaceProblem<dim>::assemble_system()
           system_rhs(local_dof_indices[i]) += cell_rhs(i);
         }
     }
-
-  std::map<types::global_dof_index, double> boundary_values;
-  VectorTools::interpolate_boundary_values(dof_handler,
-                                           0,
-                                           BoundaryValues<dim>(),
-                                           boundary_values);
-  MatrixTools::apply_boundary_values(boundary_values,
-                                     system_matrix,
-                                     solution,
-                                     system_rhs);
+  {
+    std::map<types::global_dof_index, double> boundary_values;
+    VectorTools::interpolate_boundary_values(dof_handler,
+                                             0,
+                                             BoundaryValues<dim>(),
+                                             boundary_values);
+    MatrixTools::apply_boundary_values(boundary_values,
+                                       system_matrix,
+                                       solution,
+                                       system_rhs);
+  }
+  {
+    MatrixTools::apply_boundary_values(boundary_data,
+                                       system_matrix,
+                                       solution,
+                                       system_rhs);
+  }
 }
 
 
@@ -657,14 +692,14 @@ LaplaceProblem<dim>::run()
 
   make_grid();
   setup_system();
-  assemble_system();
-  adapter.initialize(dof_handler, solution, dummy_vector);
+  adapter.initialize(dof_handler, solution, dummy_vector, boundary_data);
   while (adapter.precice.isCouplingOngoing())
     {
+      assemble_system();
       solve();
 
-      adapter.advance(solution, dummy_vector, 1);
       output_results();
+      adapter.advance(solution, dummy_vector, 1, boundary_data);
     }
 }
 

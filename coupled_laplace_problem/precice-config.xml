@@ -8,35 +8,38 @@
 
     <solver-interface dimensions="2">
 
-    <data:scalar name="solution"/>
+   <data:scalar name="boundary-data"/>
+    <data:scalar name="dummy"/>
 
     <mesh name="original-mesh">
-        <use-data name="solution"/>
+        <use-data name="boundary-data"/>
     </mesh>
 
     <mesh name="dummy-mesh">
-        <use-data name="solution"/>
+    <use-data name="boundary-data"/>
+    <use-data name="dummy"/>
     </mesh>
 
     <participant name="laplace-solver">
         <use-mesh name="original-mesh" provide="yes"/>
         <use-mesh name="dummy-mesh" from="dummy-participant"/>
-        <write-data name="solution" mesh="original-mesh"/>
-        <mapping:rbf-thin-plate-splines direction="write" from="original-mesh" to="dummy-mesh" constraint="consistent" />
+        <read-data name="boundary-data" mesh="original-mesh"/>
+        <mapping:nearest-neighbor direction="read" from="dummy-mesh" to="original-mesh" constraint="consistent" />
     </participant>
 
     <participant name="dummy-participant">
         <use-mesh name="dummy-mesh" provide="yes"/>
-        <read-data name="solution" mesh="dummy-mesh"/>
+        <read-data name="dummy" mesh="dummy-mesh"/>
+        <write-data name="boundary-data" mesh="dummy-mesh"/>
     </participant>
 
     <m2n:sockets from="laplace-solver" to="dummy-participant" />
 
     <coupling-scheme:serial-explicit>
         <time-window-size value="1"/>
-        <max-time value="1"/>
+        <max-time value="2"/>
         <participants first="laplace-solver" second="dummy-participant"/>
-        <exchange data="solution" mesh="dummy-mesh" from="laplace-solver" to="dummy-participant"/>
+        <exchange data="boundary-data" mesh="dummy-mesh" from="dummy-participant" to="laplace-solver" />
     </coupling-scheme:serial-explicit>
 
     </solver-interface>

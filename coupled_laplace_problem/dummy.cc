@@ -15,9 +15,11 @@ main()
   using namespace precice;
   using namespace precice::constants;
 
-  std::string configFileName("precice-config.xml");
-  std::string solverName("dummy-participant");
-  std::string meshName("dummy-mesh");
+  const std::string configFileName("precice-config.xml");
+  const std::string solverName("dummy-participant");
+  const std::string meshName("dummy-mesh");
+  const std::string dataWriteName("boundary-data");
+  const std::string dataReadName("dummy");
 
   std::cout << "DUMMY: Running solver dummy with preCICE config file \""
             << configFileName << "\", participant name \"" << solverName
@@ -25,40 +27,41 @@ main()
 
   SolverInterface interface(solverName, configFileName, commRank, commSize);
 
-  int         meshID     = interface.getMeshID(meshName);
-  int         dimensions = interface.getDimensions();
-  std::string dataWriteName("dummy");
-  std::string dataReadName("solution");
-  int         numberOfVertices = 10;
+  int meshID           = interface.getMeshID(meshName);
+  int dimensions       = interface.getDimensions();
+  int numberOfVertices = 10;
 
   const int readDataID  = interface.getDataID(dataReadName, meshID);
   const int writeDataID = interface.getDataID(dataWriteName, meshID);
 
   std::vector<double> readData(numberOfVertices);
   std::vector<double> writeData(numberOfVertices);
-  std::vector<double> vertices(numberOfVertices * dimensions);
   std::vector<int>    vertexIDs(numberOfVertices);
+  std::vector<double> vertices(numberOfVertices * dimensions);
 
   double deltaX = 2. / (numberOfVertices - 1);
-  for (int i = 0; i < numberOfVertices; i++)
+  for (int i = 0; i < numberOfVertices; ++i)
     {
-      for (int j = 0; j < dimensions; j++)
+      for (int j = 0; j < dimensions; ++j)
         {
-          const unsigned int index = numberOfVertices * i + j;
-          if ((index) % 2 == 0)
+          const unsigned int index = dimensions * i + j;
+          if (j == 0)
             vertices[index] = 1;
           else
             vertices[index] = 1 - deltaX * i;
         }
 
       readData[i]  = 0;
-      writeData[i] = 0;
+      writeData[i] = 2;
     }
+  //  for(uint i=0;i<vertices.size();++i)
+  //    std::cout<<vertices[i]<<std::endl;
 
   interface.setMeshVertices(meshID,
                             numberOfVertices,
                             vertices.data(),
                             vertexIDs.data());
+
 
   double dt = interface.initialize();
 
@@ -72,20 +75,20 @@ main()
 
       if (interface.isReadDataAvailable())
         {
-          interface.readBlockVectorData(readDataID,
+          interface.readBlockScalarData(readDataID,
                                         numberOfVertices,
                                         vertexIDs.data(),
                                         readData.data());
         }
 
-      for (int i = 0; i < numberOfVertices * dimensions; i++)
+      for (int i = 0; i < numberOfVertices; i++)
         {
-          writeData[i] = readData[i] + 1;
+          std::cout << readData[i] << std::endl;
         }
 
       if (interface.isWriteDataRequired(dt))
         {
-          interface.writeBlockVectorData(writeDataID,
+          interface.writeBlockScalarData(writeDataID,
                                          numberOfVertices,
                                          vertexIDs.data(),
                                          writeData.data());
