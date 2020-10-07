@@ -1,3 +1,5 @@
+// The included deal.II header files are exactly the same as in the step-4
+// tutorial program
 #include <deal.II/base/function.h>
 #include <deal.II/base/logstream.h>
 #include <deal.II/base/quadrature_lib.h>
@@ -24,7 +26,8 @@
 #include <deal.II/numerics/data_out.h>
 #include <deal.II/numerics/matrix_tools.h>
 #include <deal.II/numerics/vector_tools.h>
-
+// In addition to the deal.II header files, we include the preCICE API in order
+// to obtain access to preCICE specific functionality
 #include <precice/SolverInterface.hpp>
 
 #include <fstream>
@@ -32,6 +35,14 @@
 
 using namespace dealii;
 
+// @sect3{Configuration parameters}
+//
+// Here, we set up a simple hard-coded Struct containing the configuration of
+// our simulation setup. This includes the name of the configuration file, the
+// name of the simulation participants and the names of the exchanged data. The
+// same namings are used again in the precice configuration file, so that
+// preCICE knows, which data should be exchanged. For real application cases,
+// the configuration is likely better handled by a parameter file.
 struct CouplingParamters
 {
   const std::string config_file      = "precice-config.xml";
@@ -42,79 +53,34 @@ struct CouplingParamters
 };
 
 
+// @sect4{The Adapter class}
+//
+// The Adapter class keeps all functionalities to couple deal.II to other
+// solvers with preCICE, i.e., data structures are set up and all relevant
+// information is passed to preCICE.
 
-/**
- * The Adapter class keeps all functionalities to couple deal.II to other
- * solvers with preCICE i.e. data structures are set up, necessary information
- * is passed to preCICE etc.
- */
 template <int dim, typename VectorType, typename ParameterClass>
 class Adapter
 {
 public:
-  /**
-   * @brief      Constructor, which sets up the precice Solverinterface
-   *
-   * @param[in]  parameters Parameter class, which hold the data specified
-   *             in the parameters.prm file
-   * @param[in]  deal_boundary_interface_id Boundary ID of the triangulation,
-   *             which is associated with the coupling interface.
-   */
   Adapter(const ParameterClass &parameters,
           const unsigned int    deal_boundary_interface_id);
 
-  /**
-   * @brief      Destructor, which additionally finalizes preCICE
-   *
-   */
   ~Adapter();
 
-  /**
-   * @brief      Initializes preCICE and passes all relevant data to preCICE
-   *
-   * @param[in]  dof_handler Initialized dof_handler
-   * @param[in]  deal_to_precice Data, which should be given to preCICE and
-   *             exchanged with other participants. Wether this data is
-   *             required already in the beginning depends on your
-   *             individual configuration and preCICE determines it
-   *             automatically. In many cases, this data will just represent
-   *             your initial condition.
-   * @param[out] precice_to_deal Data, which is received from preCICE/ from
-   *             other participants. Wether this data is useful already in
-   *             the beginning depends on your individual configuration and
-   *             preCICE determines it automatically. In many cases, this
-   *             data will just represent the initial condition of other
-   *             participants.
-   */
   void
   initialize(const DoFHandler<dim> &                    dof_handler,
              const VectorType &                         deal_to_precice,
              VectorType &                               precice_to_deal,
              std::map<types::global_dof_index, double> &data);
 
-  /**
-   * @brief      Advances preCICE after every timestep, converts data formats
-   *             between preCICE and dealii
-   *
-   * @param[in]  deal_to_precice Same data as in @p initialize_precice() i.e.
-   *             data, which should be given to preCICE after each time step
-   *             and exchanged with other participants.
-   * @param[out] precice_to_deal Same data as in @p initialize_precice() i.e.
-   *             data, which is received from preCICE/other participants
-   *             after each time step and exchanged with other participants.
-   * @param[in]  computed_timestep_length Length of the timestep used by
-   *             the solver.
-   */
   void
   advance(const VectorType &                         deal_to_precice,
           VectorType &                               precice_to_deal,
           const double                               computed_timestep_length,
           std::map<types::global_dof_index, double> &data);
 
-  /**
-   * @brief public precice solverinterface
-   */
-
+  // public precice solverinterface
   precice::SolverInterface precice;
 
   // Boundary ID of the deal.II mesh, associated with the coupling
