@@ -110,44 +110,22 @@ private:
   std::vector<double> write_data;
 
 
-  /**
-   * @brief format_deal_to_precice Formats a global deal.II vector of type
-   *        VectorType to a std::vector for preCICE. This functions is only
-   *        used internally in the class and should not be called in the
-   *        solver.
-   *
-   * @param[in] deal_to_precice Global deal.II vector of VectorType. The
-   *            result (preCICE specific vector) is stored in the class in
-   *            the variable 'write_data'.
-   *
-   * @note  The order, in which preCICE obtains data from the solver, needs
-   *        to be consistent with the order of the initially passed vertices
-   *        coordinates.
-   */
   void
   format_deal_to_precice(const VectorType &deal_to_precice);
 
-  /**
-   * @brief format_precice_to_deal Takes the std::vector obtained by preCICE
-   *        in 'read_data' and inserts the values to the right position in
-   *        the global deal.II vector of size n_global_dofs. This is the
-   *        opposite functionality as @p foramt_precice_to_deal(). This
-   *        functions is only used internally in the class and should not
-   *        be called in the solver.
-   *
-   * @param[out] precice_to_deal Global deal.II vector of VectorType and
-   *             size n_global_dofs.
-   *
-   * @note  The order, in which preCICE obtains data from the solver, needs
-   *        to be consistent with the order of the initially passed vertices
-   *        coordinates.
-   */
   void
   format_precice_to_deal(VectorType &precice_to_deal) const;
 };
 
 
 
+// In the constructor of the Adapter class, we set up the preCICE
+// Solverinterface. Here, we need to tell preCICE our name as participant of the
+// simulation and the name of the preCICE-configuration file. Both have already
+// been specified in the CouplingParameter class above. Thus, we pass the class
+// directly to the constructor and read out all relevant information. As a
+// second parameter, we need to specify the boundary ID of our triangulation,
+// which is associated with the coupling interface.
 template <int dim, typename VectorType, typename ParameterClass>
 Adapter<dim, VectorType, ParameterClass>::Adapter(
   const ParameterClass &   parameters,
@@ -164,6 +142,8 @@ Adapter<dim, VectorType, ParameterClass>::Adapter(
 
 
 
+// The destructor of the Adapter class finalizes the Solverinterface, so that
+// the communication is terminated and memory is deallocated.
 template <int dim, typename VectorType, typename ParameterClass>
 Adapter<dim, VectorType, ParameterClass>::~Adapter()
 {
@@ -172,21 +152,13 @@ Adapter<dim, VectorType, ParameterClass>::~Adapter()
 
 
 
-// Initializes preCICE and passes all relevant data to preCICE
-//
-// dof_handler Initialized dof_handler
-// deal_to_precice Data, which should be given to preCICE and
-// exchanged with other participants. Wether this data is
-// required already in the beginning depends on your
-// individual configuration and preCICE determines it
-// automatically. In many cases, this data will just represent
-// your initial condition.
-// precice_to_deal Data, which is received from preCICE/ from
-// other participants. Wether this data is useful already in
-// the beginning depends on your individual configuration and
-// preCICE determines it automatically. In many cases, this
-// data will just represent the initial condition of other
-// participants.
+// This function initializes preCICE (e.g. establishes communication channels
+// and allocates memory) and passes all relevant data to preCICE. For surface
+// coupling, relevant data is especially the location of the data points at the
+// assoociated interface(s). The `boundary_data` is an empty map, which is
+// filled by preCICE, i.e., the information of our dummy participant. Throughout
+// the system assembly, the map can directly be used in order to apply the
+// Dirichlet boundary conditions.
 template <int dim, typename VectorType, typename ParameterClass>
 void
 Adapter<dim, VectorType, ParameterClass>::initialize(
@@ -315,7 +287,11 @@ Adapter<dim, VectorType, ParameterClass>::initialize(
 }
 
 
-
+// The function `advance()` is called in the main time loop after the
+// computation of each time step in the individual solver has finished. Here,
+// coupling data is passed to preCICE and obtained from other participants. In
+// case of the simplified unidirectional coupling, we just obtain data from our
+// dummy participant.
 template <int dim, typename VectorType, typename ParameterClass>
 void
 Adapter<dim, VectorType, ParameterClass>::advance(
@@ -351,20 +327,30 @@ Adapter<dim, VectorType, ParameterClass>::advance(
                                   interface_nodes_ids.data(),
                                   read_data.data());
 
-      auto dof_component = data.begin();
+      auto dof_component = boundary_data.begin();
       for (int i = 0; i < n_interface_nodes; ++i)
         {
           AssertIndexRange(i, read_data.size());
-          data[dof_component->first] = read_data[i];
+          boundary_data[dof_component->first] = read_data[i];
           ++dof_component;
         }
 
-      format_precice_to_deal(precice_to_deal);
+      //      format_precice_to_deal(precice_to_deal);
     }
 }
 
 
 
+// format_deal_to_precice Formats a global deal.II vector of type
+// VectorType to a std::vector for preCICE. This functions is only
+// used internally in the class and should not be called in the
+// solver.
+// deal_to_precice Global deal.II vector of VectorType. The
+// result (preCICE specific vector) is stored in the class in
+// the variable 'write_data'.
+// The order, in which preCICE obtains data from the solver, needs
+// to be consistent with the order of the initially passed vertices
+// coordinates.
 template <int dim, typename VectorType, typename ParameterClass>
 void
 Adapter<dim, VectorType, ParameterClass>::format_deal_to_precice(
@@ -388,6 +374,19 @@ Adapter<dim, VectorType, ParameterClass>::format_deal_to_precice(
 
 
 
+// format_precice_to_deal Takes the std::vector obtained by preCICE
+// in 'read_data' and inserts the values to the right position in
+// the global deal.II vector of size n_global_dofs. This is the
+//opposite functionality as @p foramt_precice_to_deal(). This
+// functions is only used internally in the class and should not
+// be called in the solver.
+
+// out] precice_to_deal Global deal.II vector of VectorType and
+//     size n_global_dofs.
+
+// The order, in which preCICE obtains data from the solver, needs
+// to be consistent with the order of the initially passed vertices
+// coordinates.
 template <int dim, typename VectorType, typename ParameterClass>
 void
 Adapter<dim, VectorType, ParameterClass>::format_precice_to_deal(
