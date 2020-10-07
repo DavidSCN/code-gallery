@@ -59,7 +59,7 @@ struct CouplingParamters
 // solvers with preCICE, i.e., data structures are set up and all relevant
 // information is passed to preCICE.
 
-template <int dim, typename VectorType, typename ParameterClass>
+template <int dim, typename ParameterClass>
 class Adapter
 {
 public:
@@ -111,10 +111,8 @@ private:
 
 
   void
-  format_deal_to_precice(const VectorType &deal_to_precice);
-
-  void
-  format_precice_to_deal(VectorType &precice_to_deal) const;
+  format_precice_to_deal(
+    std::map<types::global_dof_index, double> &boundary_data) const;
 };
 
 
@@ -126,8 +124,8 @@ private:
 // directly to the constructor and read out all relevant information. As a
 // second parameter, we need to specify the boundary ID of our triangulation,
 // which is associated with the coupling interface.
-template <int dim, typename VectorType, typename ParameterClass>
-Adapter<dim, VectorType, ParameterClass>::Adapter(
+template <int dim, typename ParameterClass>
+Adapter<dim, ParameterClass>::Adapter(
   const ParameterClass &   parameters,
   const types::boundary_id deal_boundary_interface_id)
   : precice(parameters.participant_name,
@@ -144,8 +142,8 @@ Adapter<dim, VectorType, ParameterClass>::Adapter(
 
 // The destructor of the Adapter class finalizes the Solverinterface, so that
 // the communication is terminated and memory is deallocated.
-template <int dim, typename VectorType, typename ParameterClass>
-Adapter<dim, VectorType, ParameterClass>::~Adapter()
+template <int dim, typename ParameterClass>
+Adapter<dim, ParameterClass>::~Adapter()
 {
   precice.finalize();
 }
@@ -159,9 +157,9 @@ Adapter<dim, VectorType, ParameterClass>::~Adapter()
 // filled by preCICE, i.e., the information of our dummy participant. Throughout
 // the system assembly, the map can directly be used in order to apply the
 // Dirichlet boundary conditions.
-template <int dim, typename VectorType, typename ParameterClass>
+template <int dim, typename ParameterClass>
 void
-Adapter<dim, VectorType, ParameterClass>::initialize(
+Adapter<dim, ParameterClass>::initialize(
   const DoFHandler<dim> &                    dof_handler,
   std::map<types::global_dof_index, double> &boundary_data)
 {
@@ -292,9 +290,9 @@ Adapter<dim, VectorType, ParameterClass>::initialize(
 // coupling data is passed to preCICE and obtained from other participants. In
 // case of the simplified unidirectional coupling, we just obtain data from our
 // dummy participant.
-template <int dim, typename VectorType, typename ParameterClass>
+template <int dim, typename ParameterClass>
 void
-Adapter<dim, VectorType, ParameterClass>::advance(
+Adapter<dim, ParameterClass>::advance(
   std::map<types::global_dof_index, double> &boundary_data,
   const double                               computed_timestep_length)
 {
@@ -341,63 +339,27 @@ Adapter<dim, VectorType, ParameterClass>::advance(
 
 
 
-// format_deal_to_precice Formats a global deal.II vector of type
-// VectorType to a std::vector for preCICE. This functions is only
-// used internally in the class and should not be called in the
-// solver.
-// deal_to_precice Global deal.II vector of VectorType. The
-// result (preCICE specific vector) is stored in the class in
-// the variable 'write_data'.
-// The order, in which preCICE obtains data from the solver, needs
-// to be consistent with the order of the initially passed vertices
-// coordinates.
-template <int dim, typename VectorType, typename ParameterClass>
-void
-Adapter<dim, VectorType, ParameterClass>::format_deal_to_precice(
-  const VectorType &deal_to_precice)
-{
-  // Assumption: x index is in the same position as y index in each IndexSet
-  // In general, higher order support points in the element are first
-  // ordered in the x component. An IndexSet for the first component might
-  // look like this: [1] [3456] [11] for a 7th order 1d interface/2d cell.
-  // Therefore, an index for the respective x component dof is not always
-  // followed by an index on the same position for the y component
-
-  auto dof_component = coupling_dofs.begin();
-  for (int i = 0; i < n_interface_nodes; ++i)
-    {
-      AssertIndexRange(i, write_data.size());
-      write_data[i] = deal_to_precice[*dof_component];
-      ++dof_component;
-    }
-}
-
-
-
 // format_precice_to_deal Takes the std::vector obtained by preCICE
 // in 'read_data' and inserts the values to the right position in
 // the global deal.II vector of size n_global_dofs. This is the
 //opposite functionality as @p foramt_precice_to_deal(). This
 // functions is only used internally in the class and should not
 // be called in the solver.
-
-// out] precice_to_deal Global deal.II vector of VectorType and
-//     size n_global_dofs.
-
-// The order, in which preCICE obtains data from the solver, needs
-// to be consistent with the order of the initially passed vertices
+// out] precice_to_deal Global deal.II vector of VectorType andsize
+// n_global_dofs. The order, in which preCICE obtains data from the solver,
+// needs to be consistent with the order of the initially passed vertices
 // coordinates.
-template <int dim, typename VectorType, typename ParameterClass>
+template <int dim, typename ParameterClass>
 void
-Adapter<dim, VectorType, ParameterClass>::format_precice_to_deal(
-  VectorType &precice_to_deal) const
+Adapter<dim, ParameterClass>::format_precice_to_deal(
+  std::map<types::global_dof_index, double> &boundary_data) const
 {
   // This is the opposite direction as above. See comment there.
-  auto dof_component = coupling_dofs.begin();
+  auto dof_component = boundary_data.begin();
   for (int i = 0; i < n_interface_nodes; ++i)
     {
       AssertIndexRange(i, read_data.size());
-      precice_to_deal[*dof_component] = read_data[i];
+      boundary_data[dof_component->first] = read_data[i];
       ++dof_component;
     }
 }
@@ -438,9 +400,9 @@ private:
   std::map<types::global_dof_index, double> boundary_data;
 
 
-  CouplingParamters                               parameters;
-  const unsigned int                              interface_boundary_id;
-  Adapter<dim, Vector<double>, CouplingParamters> adapter;
+  CouplingParamters               parameters;
+  const unsigned int              interface_boundary_id;
+  Adapter<dim, CouplingParamters> adapter;
 };
 
 
