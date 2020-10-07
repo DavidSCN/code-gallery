@@ -63,22 +63,18 @@ template <int dim, typename VectorType, typename ParameterClass>
 class Adapter
 {
 public:
-  Adapter(const ParameterClass &parameters,
-          const unsigned int    deal_boundary_interface_id);
+  Adapter(const ParameterClass &   parameters,
+          const types::boundary_id deal_boundary_interface_id);
 
   ~Adapter();
 
   void
   initialize(const DoFHandler<dim> &                    dof_handler,
-             const VectorType &                         deal_to_precice,
-             VectorType &                               precice_to_deal,
-             std::map<types::global_dof_index, double> &data);
+             std::map<types::global_dof_index, double> &boundary_data);
 
   void
-  advance(const VectorType &                         deal_to_precice,
-          VectorType &                               precice_to_deal,
-          const double                               computed_timestep_length,
-          std::map<types::global_dof_index, double> &data);
+  advance(std::map<types::global_dof_index, double> &boundary_data,
+          const double                               computed_timestep_length);
 
   // public precice solverinterface
   precice::SolverInterface precice;
@@ -154,8 +150,8 @@ private:
 
 template <int dim, typename VectorType, typename ParameterClass>
 Adapter<dim, VectorType, ParameterClass>::Adapter(
-  const ParameterClass &parameters,
-  const unsigned int    deal_boundary_interface_id)
+  const ParameterClass &   parameters,
+  const types::boundary_id deal_boundary_interface_id)
   : precice(parameters.participant_name,
             parameters.config_file,
             Utilities::MPI::this_mpi_process(MPI_COMM_WORLD),
@@ -176,16 +172,30 @@ Adapter<dim, VectorType, ParameterClass>::~Adapter()
 
 
 
+// Initializes preCICE and passes all relevant data to preCICE
+//
+// dof_handler Initialized dof_handler
+// deal_to_precice Data, which should be given to preCICE and
+// exchanged with other participants. Wether this data is
+// required already in the beginning depends on your
+// individual configuration and preCICE determines it
+// automatically. In many cases, this data will just represent
+// your initial condition.
+// precice_to_deal Data, which is received from preCICE/ from
+// other participants. Wether this data is useful already in
+// the beginning depends on your individual configuration and
+// preCICE determines it automatically. In many cases, this
+// data will just represent the initial condition of other
+// participants.
 template <int dim, typename VectorType, typename ParameterClass>
 void
 Adapter<dim, VectorType, ParameterClass>::initialize(
   const DoFHandler<dim> &                    dof_handler,
-  const VectorType &                         deal_to_precice,
-  VectorType &                               precice_to_deal,
-  std::map<types::global_dof_index, double> &data)
+  std::map<types::global_dof_index, double> &boundary_data)
 {
   Assert(dim > 1, ExcNotImplemented());
-  Assert(dim == precice.getDimensions(), ExcInternalError());
+  Assert(dim == precice.getDimensions(),
+         ExcDimensionMismatch(dim, precice.getDimensions()));
 
   // get precice specific IDs from precice and store them in the class
   // they are later needed for data transfer
@@ -209,7 +219,7 @@ Adapter<dim, VectorType, ParameterClass>::initialize(
                                   couplingBoundary);
 
   for (auto i : coupling_dofs)
-    data.insert(std::pair<types::global_dof_index, double>(i, 0));
+    boundary_data.insert(std::pair<types::global_dof_index, double>(i, 0));
 
   // Comment about scalar problems
 
@@ -267,7 +277,7 @@ Adapter<dim, VectorType, ParameterClass>::initialize(
   if (precice.isActionRequired(precice::constants::actionWriteInitialData()))
     {
       // store initial write_data for precice in write_data
-      format_deal_to_precice(deal_to_precice);
+      //      format_deal_to_precice(deal_to_precice);
 
       precice.writeBlockScalarData(write_data_id,
                                    n_interface_nodes,
@@ -292,15 +302,15 @@ Adapter<dim, VectorType, ParameterClass>::initialize(
                                   read_data.data());
 
       // This is the opposite direction as above. See comment there.
-      auto dof_component = data.begin();
+      auto dof_component = boundary_data.begin();
       for (int i = 0; i < n_interface_nodes; ++i)
         {
           AssertIndexRange(i, read_data.size());
-          data[dof_component->first] = read_data[i];
+          boundary_data[dof_component->first] = read_data[i];
           ++dof_component;
         }
 
-      format_precice_to_deal(precice_to_deal);
+      //      format_precice_to_deal(precice_to_deal);
     }
 }
 
@@ -309,10 +319,8 @@ Adapter<dim, VectorType, ParameterClass>::initialize(
 template <int dim, typename VectorType, typename ParameterClass>
 void
 Adapter<dim, VectorType, ParameterClass>::advance(
-  const VectorType &                         deal_to_precice,
-  VectorType &                               precice_to_deal,
-  const double                               computed_timestep_length,
-  std::map<types::global_dof_index, double> &data)
+  std::map<types::global_dof_index, double> &boundary_data,
+  const double                               computed_timestep_length)
 {
   // This is essentially the same as during initialization
   // We have already all IDs and just need to convert our obtained data to
@@ -322,7 +330,7 @@ Adapter<dim, VectorType, ParameterClass>::advance(
   if (precice.hasData(write_data_name, mesh_id))
     if (precice.isWriteDataRequired(computed_timestep_length))
       {
-        format_deal_to_precice(deal_to_precice);
+        //        format_deal_to_precice(deal_to_precice);
         precice.writeBlockScalarData(write_data_id,
                                      n_interface_nodes,
                                      interface_nodes_ids.data(),
@@ -647,14 +655,14 @@ LaplaceProblem<dim>::run()
 
   make_grid();
   setup_system();
-  adapter.initialize(dof_handler, solution, dummy_vector, boundary_data);
+  adapter.initialize(dof_handler, boundary_data);
   while (adapter.precice.isCouplingOngoing())
     {
       assemble_system();
       solve();
 
       output_results();
-      adapter.advance(solution, dummy_vector, 1, boundary_data);
+      adapter.advance(boundary_data, 1);
     }
 }
 
