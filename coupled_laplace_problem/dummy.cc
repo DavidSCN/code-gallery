@@ -15,6 +15,7 @@ main()
   using namespace precice;
   using namespace precice::constants;
 
+  // Configuration
   const std::string configFileName("precice-config.xml");
   const std::string solverName("dummy-participant");
   const std::string meshName("dummy-mesh");
@@ -39,37 +40,46 @@ main()
                             interface.getDataID(dataWriteName, meshID) :
                             -1;
 
+  // Set up data structures
   std::vector<double> readData(numberOfVertices);
   std::vector<double> writeData(numberOfVertices);
   std::vector<int>    vertexIDs(numberOfVertices);
   std::vector<double> vertices(numberOfVertices * dimensions);
 
-  double deltaX = 2. / (numberOfVertices - 1);
+  // Define a boundary mesh
+  const double deltaX = 2. / (numberOfVertices - 1);
   for (int i = 0; i < numberOfVertices; ++i)
     {
       for (int j = 0; j < dimensions; ++j)
         {
           const unsigned int index = dimensions * i + j;
+          // The x-coordinate is always 1, i.e., the boundary is parallel to the
+          // y-axis. The y-coordinate is descending from 1 to -1.
           if (j == 0)
             vertices[index] = 1;
           else
             vertices[index] = 1 - deltaX * i;
         }
 
+      // Specify the actual data we want to pass to the other participant. We
+      // enforce continuity to adjacent boundaries, where the value is set to 2
+      // by specifying the first and the last value. The remaining vertices are
+      // associated with a random value between 0 and 2.
       if (i == 0)
         writeData[i] = 2;
       else if (i == numberOfVertices - 1)
         writeData[i] = 2;
       else
-        writeData[i] = (double)(rand() % 20) / 20.;
+        writeData[i] = (double)(rand() % 20) / 10.;
     }
 
+  // Pass the vertices to preCICE
   interface.setMeshVertices(meshID,
                             numberOfVertices,
                             vertices.data(),
                             vertexIDs.data());
 
-
+  // initialize the Solverinterface
   double dt = interface.initialize();
 
   if (interface.isActionRequired(actionWriteInitialData()))
