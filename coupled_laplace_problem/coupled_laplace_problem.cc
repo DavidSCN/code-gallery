@@ -247,8 +247,7 @@ Adapter<dim, ParameterClass>::initialize(
   if (precice.isActionRequired(precice::constants::actionWriteInitialData()))
     {
       // store initial write_data for precice in write_data
-      //      format_deal_to_precice(deal_to_precice);
-
+      // Comment about extracting data from deal to precice
       precice.writeBlockScalarData(write_data_id,
                                    n_interface_nodes,
                                    interface_nodes_ids.data(),
@@ -272,15 +271,7 @@ Adapter<dim, ParameterClass>::initialize(
                                   read_data.data());
 
       // This is the opposite direction as above. See comment there.
-      auto dof_component = boundary_data.begin();
-      for (int i = 0; i < n_interface_nodes; ++i)
-        {
-          AssertIndexRange(i, read_data.size());
-          boundary_data[dof_component->first] = read_data[i];
-          ++dof_component;
-        }
-
-      //      format_precice_to_deal(precice_to_deal);
+      format_precice_to_deal(boundary_data);
     }
 }
 
@@ -304,7 +295,7 @@ Adapter<dim, ParameterClass>::advance(
   if (precice.hasData(write_data_name, mesh_id))
     if (precice.isWriteDataRequired(computed_timestep_length))
       {
-        //        format_deal_to_precice(deal_to_precice);
+        // Comment about extracting data from deal to precice
         precice.writeBlockScalarData(write_data_id,
                                      n_interface_nodes,
                                      interface_nodes_ids.data(),
@@ -325,15 +316,7 @@ Adapter<dim, ParameterClass>::advance(
                                   interface_nodes_ids.data(),
                                   read_data.data());
 
-      auto dof_component = boundary_data.begin();
-      for (int i = 0; i < n_interface_nodes; ++i)
-        {
-          AssertIndexRange(i, read_data.size());
-          boundary_data[dof_component->first] = read_data[i];
-          ++dof_component;
-        }
-
-      //      format_precice_to_deal(precice_to_deal);
+      format_precice_to_deal(boundary_data);
     }
 }
 
