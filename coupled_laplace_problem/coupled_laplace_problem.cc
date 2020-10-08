@@ -244,6 +244,8 @@ Adapter<dim, ParameterClass>::initialize(
   precice.initialize();
 
   // write initial writeData to preCICE if required
+  // TODO: Should we remove this block here? No data is written, but it would
+  // illustrate the concept.
   if (precice.isActionRequired(precice::constants::actionWriteInitialData()))
     {
       // store initial write_data for precice in write_data
@@ -292,6 +294,8 @@ Adapter<dim, ParameterClass>::advance(
   // the preCICE compatible 'write_data' vector, which is done in the
   // format_deal_to_precice function. All this is of course only done in
   // case write data is required.
+  // TODO: Should we remove this block here? No data is written, but it would
+  // illustrate the concept.
   if (precice.hasData(write_data_name, mesh_id))
     if (precice.isWriteDataRequired(computed_timestep_length))
       {
@@ -306,9 +310,11 @@ Adapter<dim, ParameterClass>::advance(
   // preCICE
   precice.advance(computed_timestep_length);
 
-  // Here, we obtain data from another participant. Again, we insert the
-  // data in our global vector by calling format_precice_to_deal
-
+  // Here, we obtain data, i.e. the boundary condition, from another
+  // participant. We have already all IDs and just need to convert our obtained
+  // data to the deal.II compatible 'boundary map' , which is done in the
+  // format_deal_to_precice function. All this is of course only done in
+  // case write data is required.
   if (precice.isReadDataAvailable())
     {
       precice.readBlockScalarData(read_data_id,
@@ -322,16 +328,12 @@ Adapter<dim, ParameterClass>::advance(
 
 
 
-// format_precice_to_deal Takes the std::vector obtained by preCICE
-// in 'read_data' and inserts the values to the right position in
-// the global deal.II vector of size n_global_dofs. This is the
-//opposite functionality as @p foramt_precice_to_deal(). This
-// functions is only used internally in the class and should not
-// be called in the solver.
-// out] precice_to_deal Global deal.II vector of VectorType andsize
-// n_global_dofs. The order, in which preCICE obtains data from the solver,
-// needs to be consistent with the order of the initially passed vertices
-// coordinates.
+// This function takes the std::vector obtained by preCICE in 'read_data' and
+// inserts the values to the right position in the boundary map used throughout
+// deal.II. The function is only used internally in the Adapter class and not
+// called in the solver itself. The order, in which preCICE sorts the data in
+// the 'read_data' vector is exactly the same as the order of the initially
+// passed vertices coordinates.
 template <int dim, typename ParameterClass>
 void
 Adapter<dim, ParameterClass>::format_precice_to_deal(
@@ -348,7 +350,8 @@ Adapter<dim, ParameterClass>::format_precice_to_deal(
 }
 
 
-
+// The solver class is essentially the same as in step-4. Comments are added at
+// any point, where the class is different.
 template <int dim>
 class LaplaceProblem
 {
@@ -377,15 +380,20 @@ private:
   SparsityPattern      sparsity_pattern;
   SparseMatrix<double> system_matrix;
 
-  Vector<double>                            solution;
-  Vector<double>                            system_rhs;
-  Vector<double>                            dummy_vector;
+  Vector<double> solution;
+  Vector<double> system_rhs;
+
+  // Here, we allocate all structures required for the preCICE coupling. The map
+  // is used to apply Dirichlet boundary conditions and filled in the Adapter
+  // class with data from our dummy participant. The CouplingParameters hold the
+  // preCICE configuration as described above. The interdace boundary ID is the
+  // ID associated to our coupling interface and needs to be specified, when we
+  // set up the Adapter class object, because we pass it directly to the
+  // Constructor of this class.
   std::map<types::global_dof_index, double> boundary_data;
-
-
-  CouplingParamters               parameters;
-  const unsigned int              interface_boundary_id;
-  Adapter<dim, CouplingParamters> adapter;
+  CouplingParamters                         parameters;
+  const types::boundary_id                  interface_boundary_id;
+  Adapter<dim, CouplingParamters>           adapter;
 };
 
 
@@ -452,7 +460,8 @@ LaplaceProblem<dim>::make_grid()
       {
         const auto face = cell->face(f);
 
-        // boundary in positive x direction
+        // We choose (arbitrarily) the boundary in positive x direction for the
+        // interface coupling.
         if (face->at_boundary() && (face->center()[0] == 1))
           face->set_boundary_id(interface_boundary_id);
       }
@@ -480,7 +489,6 @@ LaplaceProblem<dim>::setup_system()
   system_matrix.reinit(sparsity_pattern);
 
   solution.reinit(dof_handler.n_dofs());
-  dummy_vector.reinit(dof_handler.n_dofs());
   system_rhs.reinit(dof_handler.n_dofs());
 }
 
@@ -539,6 +547,8 @@ LaplaceProblem<dim>::assemble_system()
         }
     }
   {
+    // At first, we apply the Dirichlet boundary condition from step-4, as
+    // usual.
     std::map<types::global_dof_index, double> boundary_values;
     VectorTools::interpolate_boundary_values(dof_handler,
                                              0,
@@ -550,6 +560,8 @@ LaplaceProblem<dim>::assemble_system()
                                        system_rhs);
   }
   {
+    // Afterwards, we apply the coupling boundary condition. The `boundary_data`
+    // has already been filled by preCICE.
     MatrixTools::apply_boundary_values(boundary_data,
                                        system_matrix,
                                        solution,
@@ -599,14 +611,36 @@ LaplaceProblem<dim>::run()
 
   make_grid();
   setup_system();
+
+  // After we set up out system, we initialize preCICE using the functionalities
+  // of our Adapter.
   adapter.initialize(dof_handler, boundary_data);
+
+  // preCICE steers the coupled simulation completely. The steering is provided
+  // by the function `isCouplingOngoing`, which teels the solver, whether the
+  // time loop has already been finished or not. This tutorial solves 'just' an
+  // explicit coupled stationary problem, so that the return of this statement
+  // is trivial, but it is kept here to illustrate the general concept.
   while (adapter.precice.isCouplingOngoing())
     {
+      // In the time loop, we assemble the coupled system and solve it, as
+      // usual. According to our configuration, we obtained already the data of
+      // our dummy participant during the initialization.
       assemble_system();
       solve();
 
-      output_results();
+      // After we solved the system, we advance in the adapter. In a coupled
+      // simulation, we would pass our calculated data to preCICE and obtain
+      // data from other participants. Here, we simply obtain data from the
+      // dummy participant. Since we wish to solve a stationary problem, we set
+      // the time-step size equal to the time-window size of the coupled system,
+      // which is 1.
       adapter.advance(boundary_data, 1);
+
+      // In case our time step has been completed, we write the results to an
+      // output file.
+      if (adapter.precice.isTimeWindowComplete())
+        output_results();
     }
 }
 
