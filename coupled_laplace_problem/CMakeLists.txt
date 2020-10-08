@@ -40,3 +40,7 @@ DEAL_II_INVOKE_AUTOPILOT()
 
 FIND_PACKAGE(precice REQUIRED)
 TARGET_LINK_LIBRARIES(${TARGET} precice::precice)
+
+# In order to build the dummy, the DEAL_II macros are not required
+ADD_EXECUTABLE(dummy dummy.cc)
+TARGET_LINK_LIBRARIES(dummy precice::precice)
