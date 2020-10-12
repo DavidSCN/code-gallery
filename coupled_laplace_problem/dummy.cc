@@ -1,5 +1,3 @@
-// To compile use:
-// mpic++ -I$PRECICE_ROOT/src main.cpp -lprecice -o solverdummy
 
 #include <iostream>
 #include <sstream>
