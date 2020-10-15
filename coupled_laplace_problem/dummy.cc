@@ -36,18 +36,18 @@ main()
             << configFileName << "\", participant name \"" << solverName
             << "\", and mesh name \"" << meshName << "\".\n";
 
-  SolverInterface interface(solverName, configFileName, commRank, commSize);
+  SolverInterface precice(solverName, configFileName, commRank, commSize);
 
-  const int meshID           = interface.getMeshID(meshName);
-  const int dimensions       = interface.getDimensions();
+  const int meshID           = precice.getMeshID(meshName);
+  const int dimensions       = precice.getDimensions();
   const int numberOfVertices = 6;
 
 
-  const int readDataID = interface.hasData(dataReadName, meshID) ?
-                           interface.getDataID(dataReadName, meshID) :
+  const int readDataID = precice.hasData(dataReadName, meshID) ?
+                           precice.getDataID(dataReadName, meshID) :
                            -1;
-  const int writeDataID = interface.hasData(dataWriteName, meshID) ?
-                            interface.getDataID(dataWriteName, meshID) :
+  const int writeDataID = precice.hasData(dataWriteName, meshID) ?
+                            precice.getDataID(dataWriteName, meshID) :
                             -1;
 
   // Set up data structures
@@ -74,59 +74,57 @@ main()
   define_boundary_values(writeData, -1);
 
   // Pass the vertices to preCICE
-  interface.setMeshVertices(meshID,
-                            numberOfVertices,
-                            vertices.data(),
-                            vertexIDs.data());
+  precice.setMeshVertices(meshID,
+                          numberOfVertices,
+                          vertices.data(),
+                          vertexIDs.data());
 
   // initialize the Solverinterface
-  double dt = interface.initialize();
+  double dt = precice.initialize();
 
-  if (interface.isActionRequired(actionWriteInitialData()))
+  if (precice.isActionRequired(actionWriteInitialData()))
     {
       std::cout << "DUMMY: Writing initial data \n";
-      interface.writeBlockScalarData(writeDataID,
-                                     numberOfVertices,
-                                     vertexIDs.data(),
-                                     writeData.data());
+      precice.writeBlockScalarData(writeDataID,
+                                   numberOfVertices,
+                                   vertexIDs.data(),
+                                   writeData.data());
 
-      interface.markActionFulfilled(actionWriteInitialData());
+      precice.markActionFulfilled(actionWriteInitialData());
 
-      interface.initializeData();
+      precice.initializeData();
     }
 
   double end_time = 10;
   double time     = -end_time / 2;
-  while (interface.isCouplingOngoing())
+  while (precice.isCouplingOngoing())
     {
       time += dt;
       define_boundary_values(writeData, time / (end_time / 2));
 
-      if (interface.isWriteDataRequired(dt))
+      if (precice.isWriteDataRequired(dt))
         {
           std::cout << "DUMMY: Writing coupling data \n";
-          interface.writeBlockScalarData(writeDataID,
-                                         numberOfVertices,
-                                         vertexIDs.data(),
-                                         writeData.data());
+          precice.writeBlockScalarData(writeDataID,
+                                       numberOfVertices,
+                                       vertexIDs.data(),
+                                       writeData.data());
         }
 
-      dt = interface.advance(dt);
+      dt = precice.advance(dt);
       std::cout << "DUMMY: Advancing in time\n";
 
       // FIXME: Should retun false
-      if (interface.isReadDataAvailable() && false)
+      if (precice.isReadDataAvailable() && false)
         {
           std::cout << "DUMMY: Reading coupling data \n";
-          interface.readBlockScalarData(readDataID,
-                                        numberOfVertices,
-                                        vertexIDs.data(),
-                                        readData.data());
+          precice.readBlockScalarData(readDataID,
+                                      numberOfVertices,
+                                      vertexIDs.data(),
+                                      readData.data());
         }
     }
 
-
-  interface.finalize();
   std::cout << "DUMMY: Closing C++ solver dummy...\n";
 
   return 0;

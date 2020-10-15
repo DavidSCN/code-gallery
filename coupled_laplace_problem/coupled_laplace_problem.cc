@@ -49,7 +49,6 @@ struct CouplingParamters
   const std::string config_file      = "precice-config.xml";
   const std::string participant_name = "laplace-solver";
   const std::string mesh_name        = "original-mesh";
-  const std::string write_data_name  = "dummy";
   const std::string read_data_name   = "boundary-data";
 };
 
@@ -66,8 +65,6 @@ class Adapter
 public:
   Adapter(const ParameterClass &   parameters,
           const types::boundary_id deal_boundary_interface_id);
-
-  ~Adapter();
 
   void
   initialize(const DoFHandler<dim> &                    dof_handler,
@@ -94,13 +91,11 @@ private:
   // introduced in the beginning.
   const std::string mesh_name;
   const std::string read_data_name;
-  const std::string write_data_name;
 
   // These IDs are filled by preCICE during the initialization. We set a default
   // value of -1 in order to detect potential errors more easily.
   int mesh_id           = -1;
   int read_data_id      = -1;
-  int write_data_id     = -1;
   int n_interface_nodes = -1;
 
   // Dof IndexSet, containing relevant coupling dof indices at the coupling
@@ -111,7 +106,6 @@ private:
   // specific format
   std::vector<int>    interface_nodes_ids;
   std::vector<double> read_data;
-  std::vector<double> write_data;
 
 
   void
@@ -139,18 +133,7 @@ Adapter<dim, ParameterClass>::Adapter(
   , deal_boundary_interface_id(deal_boundary_interface_id)
   , mesh_name(parameters.mesh_name)
   , read_data_name(parameters.read_data_name)
-  , write_data_name(parameters.write_data_name)
 {}
-
-
-
-// The destructor of the Adapter class finalizes the Solverinterface, so that
-// the communication is terminated and memory is deallocated.
-template <int dim, typename ParameterClass>
-Adapter<dim, ParameterClass>::~Adapter()
-{
-  precice.finalize();
-}
 
 
 
@@ -173,13 +156,9 @@ Adapter<dim, ParameterClass>::initialize(
 
   // In a first step, we get precice specific IDs from precice and store them in
   // the respective variables. Later, they are used for data transfer.
-  mesh_id = precice.getMeshID(mesh_name);
+  mesh_id      = precice.getMeshID(mesh_name);
+  read_data_id = precice.getDataID(read_data_name, mesh_id);
 
-  if (precice.hasData(read_data_name, mesh_id))
-    read_data_id = precice.getDataID(read_data_name, mesh_id);
-
-  if (precice.hasData(write_data_name, mesh_id))
-    write_data_id = precice.getDataID(write_data_name, mesh_id);
 
   // Afterwards, we extract the number of interface nodes and the coupling DoFs
   // at the coupling interface from our deal.II solver via
@@ -206,16 +185,14 @@ Adapter<dim, ParameterClass>::initialize(
   std::cout << "\t Number of coupling nodes:     " << n_interface_nodes
             << std::endl;
 
-  // Now, we need to tell preCICE the coordinates of the interface nodes. The
-  // preCICE API requires the utilization of std::vectors. Hence, we set up a
-  // vector to pass the node positions to preCICE. Each node is specified only
-  // once.
+  // Now, we need to tell preCICE the coordinates of the interface nodes. Hence,
+  // we set up a std::vector to pass the node positions to preCICE. Each node is
+  // specified only once.
   std::vector<double> interface_nodes_positions(dim * n_interface_nodes);
 
   // Set up the appropriate size of the data container needed for data
   // exchange. Here, we deal with a scalar problem, so that only a scalar value
   // is read/written per interface node.
-  write_data.resize(n_interface_nodes);
   read_data.resize(n_interface_nodes);
   // The IDs are again filled by preCICE during the initializations.
   interface_nodes_ids.resize(n_interface_nodes);
