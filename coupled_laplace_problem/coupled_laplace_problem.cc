@@ -407,6 +407,8 @@ private:
   CouplingParamters                         parameters;
   const types::boundary_id                  interface_boundary_id;
   Adapter<dim, CouplingParamters>           adapter;
+
+  unsigned int time_step = 0;
 };
 
 
@@ -511,6 +513,10 @@ template <int dim>
 void
 LaplaceProblem<dim>::assemble_system()
 {
+  // Reset global structures
+  system_rhs    = 0;
+  system_matrix = 0;
+
   QGauss<dim> quadrature_formula(fe.degree + 1);
 
   RightHandSide<dim> right_hand_side;
@@ -609,7 +615,7 @@ LaplaceProblem<dim>::output_results() const
 
   data_out.build_patches();
 
-  std::ofstream output(dim == 2 ? "solution-2d.vtk" : "solution-3d.vtk");
+  std::ofstream output("solution-" + std::to_string(time_step) + ".vtk");
   data_out.write_vtk(output);
 }
 
@@ -636,6 +642,8 @@ LaplaceProblem<dim>::run()
   // is trivial, but it is kept here to illustrate the general concept.
   while (adapter.precice.isCouplingOngoing())
     {
+      // The time step number is solely used to generate unique output files
+      ++time_step;
       // In the time loop, we assemble the coupled system and solve it, as
       // usual. According to our configuration, we obtained already the data of
       // our dummy participant during the initialization.

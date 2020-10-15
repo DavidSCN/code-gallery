@@ -4,6 +4,18 @@
 
 #include "precice/SolverInterface.hpp"
 
+void
+define_boundary_values(std::vector<double> &boundary_data, double amplitude)
+{
+  // Specify the actual data we want to pass to the other participant. Here, we
+  // choose a parabola with boundary values 2 in order to enforce continuity
+  // to adjacent boundaries.
+  const unsigned int n_elements = boundary_data.size();
+  for (uint i = 0; i < n_elements; ++i)
+    boundary_data[i] = amplitude * (i * ((n_elements - 1) - i)) + 2;
+}
+
+
 int
 main()
 {
@@ -47,29 +59,19 @@ main()
   // Define a boundary mesh
   const double deltaX = 2. / (numberOfVertices - 1);
   for (int i = 0; i < numberOfVertices; ++i)
-    {
-      for (int j = 0; j < dimensions; ++j)
-        {
-          const unsigned int index = dimensions * i + j;
-          // The x-coordinate is always 1, i.e., the boundary is parallel to the
-          // y-axis. The y-coordinate is descending from 1 to -1.
-          if (j == 0)
-            vertices[index] = 1;
-          else
-            vertices[index] = 1 - deltaX * i;
-        }
+    for (int j = 0; j < dimensions; ++j)
+      {
+        const unsigned int index = dimensions * i + j;
+        // The x-coordinate is always 1, i.e., the boundary is parallel to the
+        // y-axis. The y-coordinate is descending from 1 to -1.
+        if (j == 0)
+          vertices[index] = 1;
+        else
+          vertices[index] = 1 - deltaX * i;
+      }
 
-      // Specify the actual data we want to pass to the other participant. We
-      // enforce continuity to adjacent boundaries, where the value is set to 2
-      // by specifying the first and the last value. The remaining vertices are
-      // associated with a random value between 0 and 2.
-      if (i == 0)
-        writeData[i] = 2;
-      else if (i == numberOfVertices - 1)
-        writeData[i] = 2;
-      else
-        writeData[i] = (double)(rand() % 20) / 10.;
-    }
+  // Start with an amplitude of -1
+  define_boundary_values(writeData, -1);
 
   // Pass the vertices to preCICE
   interface.setMeshVertices(meshID,
@@ -93,8 +95,13 @@ main()
       interface.initializeData();
     }
 
+  double end_time = 10;
+  double time     = -end_time / 2;
   while (interface.isCouplingOngoing())
     {
+      time += dt;
+      define_boundary_values(writeData, time / (end_time / 2));
+
       if (interface.isWriteDataRequired(dt))
         {
           std::cout << "DUMMY: Writing coupling data \n";

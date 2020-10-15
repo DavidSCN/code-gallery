@@ -34,7 +34,7 @@
 
     <coupling-scheme:serial-explicit>
         <time-window-size value="1"/>
-        <max-time value="1"/>
+        <max-time value="10"/>
         <participants first="laplace-solver" second="dummy-participant"/>
         <exchange data="boundary-data" mesh="dummy-mesh" from="dummy-participant" to="laplace-solver" initialize="true"/>
     </coupling-scheme:serial-explicit>
