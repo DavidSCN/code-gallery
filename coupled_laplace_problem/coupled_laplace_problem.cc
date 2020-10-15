@@ -37,12 +37,12 @@ using namespace dealii;
 
 // @sect3{Configuration parameters}
 //
-// Here, we set up a simple hard-coded Struct containing the configuration of
-// our simulation setup. The configuration includes the name of the
-// configuration file, the name of the simulation participants and the names of
-// the exchanged data. The same namings are used again in the precice
-// configuration file, so that preCICE knows, which data should be exchanged.
-// For real application cases, the configuration is likely better handled by a
+// We set up a simple hard-coded struct containing all names we need for
+// external coupling. The struct includes the name of the preCICE
+// configuration file as well as the name of the simulation participant, the name of the
+// coupling mesh and the name of the exchanged data. 
+// The last three names you also find in the preCICE configuration file.
+// For real application cases, these names are better handled by a
 // parameter file.
 struct CouplingParamters
 {
