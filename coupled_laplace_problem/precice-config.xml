@@ -10,33 +10,33 @@
 
    <data:scalar name="boundary-data"/>
 
-    <mesh name="original-mesh">
+    <mesh name="dealii-mesh">
         <use-data name="boundary-data"/>
     </mesh>
 
-    <mesh name="dummy-mesh">
+    <mesh name="boundary-mesh">
     <use-data name="boundary-data"/>
     </mesh>
 
     <participant name="laplace-solver">
-        <use-mesh name="original-mesh" provide="yes"/>
-        <use-mesh name="dummy-mesh" from="dummy-participant"/>
-        <read-data name="boundary-data" mesh="original-mesh"/>
-        <mapping:rbf-thin-plate-splines direction="read" from="dummy-mesh" to="original-mesh" constraint="consistent" x-dead="true"/>
+        <use-mesh name="dealii-mesh" provide="yes"/>
+        <use-mesh name="boundary-mesh" from="boundary-participant"/>
+        <read-data name="boundary-data" mesh="dealii-mesh"/>
+        <mapping:rbf-thin-plate-splines direction="read" from="boundary	-mesh" to="dealii-mesh" constraint="consistent" x-dead="true"/>
     </participant>
 
-    <participant name="dummy-participant">
-        <use-mesh name="dummy-mesh" provide="yes"/>
-        <write-data name="boundary-data" mesh="dummy-mesh"/>
+    <participant name="boundary-participant">
+        <use-mesh name="boundary-mesh" provide="yes"/>
+        <write-data name="boundary-data" mesh="boundary-mesh"/>
     </participant>
 
-    <m2n:sockets from="laplace-solver" to="dummy-participant" />
+    <m2n:sockets from="laplace-solver" to="boundary-participant" />
 
     <coupling-scheme:serial-explicit>
         <time-window-size value="1"/>
         <max-time value="10"/>
-        <participants first="dummy-participant" second="laplace-solver"/>
-        <exchange data="boundary-data" mesh="dummy-mesh" from="dummy-participant" to="laplace-solver"/>
+        <participants first="boundary-participant" second="laplace-solver"/>
+        <exchange data="boundary-data" mesh="boundary-mesh" from="boundary-participant" to="laplace-solver"/>
     </coupling-scheme:serial-explicit>
 
     </solver-interface>

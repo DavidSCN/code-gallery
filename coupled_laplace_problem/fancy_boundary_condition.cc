@@ -27,8 +27,8 @@ main()
 
   // Configuration
   const std::string configFileName("precice-config.xml");
-  const std::string solverName("dummy-participant");
-  const std::string meshName("dummy-mesh");
+  const std::string solverName("boundary-participant");
+  const std::string meshName("boundary-mesh");
   const std::string dataWriteName("boundary-data");
 
   SolverInterface precice(solverName, configFileName, commRank, commSize);
@@ -36,7 +36,6 @@ main()
   const int meshID           = precice.getMeshID(meshName);
   const int dimensions       = precice.getDimensions();
   const int numberOfVertices = 6;
-
 
   const int dataID = precice.getDataID(dataWriteName, meshID);
 
@@ -73,34 +72,23 @@ main()
   // initialize the Solverinterface
   double dt = precice.initialize();
 
-  if (precice.isActionRequired(constants::actionWriteInitialData()))
-    {
-      std::cout << "DUMMY: Writing initial data \n";
-      precice.writeBlockScalarData(dataID,
-                                   numberOfVertices,
-                                   vertexIDs.data(),
-                                   writeData.data());
-
-      precice.markActionFulfilled(constants::actionWriteInitialData());
-
-      precice.initializeData();
-    }
-
+  // Start time loop
   double end_time = 10;
   double time     = -end_time / 2;
   while (precice.isCouplingOngoing())
     {
       time += dt;
+
+      // Generate new boundary data
       define_boundary_values(writeData, time / (end_time / 2));
 
-      if (precice.isWriteDataRequired(dt))
-        {
-          std::cout << "DUMMY: Writing coupling data \n";
-          precice.writeBlockScalarData(dataID,
-                                       numberOfVertices,
-                                       vertexIDs.data(),
-                                       writeData.data());
-        }
+      {
+        std::cout << "DUMMY: Writing coupling data \n";
+        precice.writeBlockScalarData(dataID,
+                                     numberOfVertices,
+                                     vertexIDs.data(),
+                                     writeData.data());
+      }
 
       dt = precice.advance(dt);
       std::cout << "DUMMY: Advancing in time\n";

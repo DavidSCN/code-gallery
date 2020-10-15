@@ -39,11 +39,10 @@ using namespace dealii;
 //
 // We set up a simple hard-coded struct containing all names we need for
 // external coupling. The struct includes the name of the preCICE
-// configuration file as well as the name of the simulation participant, the name of the
-// coupling mesh and the name of the exchanged data. 
-// The last three names you also find in the preCICE configuration file.
-// For real application cases, these names are better handled by a
-// parameter file.
+// configuration file as well as the name of the simulation participant, the
+// name of the coupling mesh and the name of the exchanged data. The last three
+// names you also find in the preCICE configuration file. For real application
+// cases, these names are better handled by a parameter file.
 struct CouplingParamters
 {
   const std::string config_file      = "precice-config.xml";
@@ -107,7 +106,8 @@ private:
   std::vector<int>    interface_nodes_ids;
   std::vector<double> read_data;
 
-
+  // Function to transform the obtained data from preCICE into an appropriate
+  // map for Dirichlet boundary conditions
   void
   format_precice_to_deal(
     std::map<types::global_dof_index, double> &boundary_data) const;

@@ -23,13 +23,13 @@ or
 ```
 make release
 ```
-This command will generate two executables: one for the `coupled_laplace_problem` and one for the `dummy` participant.
+This command will generate two executables: one for the `coupled_laplace_problem` and one for the `fancy_boundary_condition` participant.
 ```
 make run
 ```
 excutes the `coupled_laplace_problem`. In order to run the coupled simulation, execute
 ```
-./dummy
+./fancy_boundary_condition
 ```
 in the same directory from another terminal window.
 
