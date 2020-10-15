@@ -5,7 +5,7 @@ Black-box coupled Laplace equation
 What is preCICE? What is black-box coupling? What is this tutorial about?
 
 ## Requirements
-* Version `9.3` or greater of `deal.II` TODO: Check for lower version
+* Version `9.2` or greater of `deal.II`
 
 * [preCICE](https://github.com/precice/precice/wiki#1-get-precice)
 
