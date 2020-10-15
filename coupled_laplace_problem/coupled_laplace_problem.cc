@@ -234,7 +234,7 @@ Adapter<dim, ParameterClass>::initialize(
   // extracted coupling_dofs.
 
   // preCICE expects all data in the format [x0, y0, z0, x1, y1 ...]. In 2D, the
-  // last z coordinate needs to be omitted.
+  // z coordinate needs to be omitted.
   int node_position_iterator = 0;
   for (auto element : coupling_dofs)
     {
@@ -256,25 +256,6 @@ Adapter<dim, ParameterClass>::initialize(
   // `initialize()`
   precice.initialize();
 
-  // write initial writeData to preCICE if required
-  // TODO: Should we remove this block here? No data is written, but it would
-  // illustrate the concept.
-  if (precice.isActionRequired(precice::constants::actionWriteInitialData()))
-    {
-      // store initial write_data for precice in write_data
-      // Comment about extracting data from deal to precice
-      precice.writeBlockScalarData(write_data_id,
-                                   n_interface_nodes,
-                                   interface_nodes_ids.data(),
-                                   write_data.data());
-
-      precice.markActionFulfilled(precice::constants::actionWriteInitialData());
-    }
-
-  // TODO: Discuss position of this function: inside the if statement leads to a
-  // precice error, because no initial data is required, but it needs to be
-  // initialized
-  precice.initializeData();
 
   // read initial readData from preCICE if required for the first time step
   // FIXME: Data is already exchanged here
@@ -302,40 +283,19 @@ Adapter<dim, ParameterClass>::advance(
   std::map<types::global_dof_index, double> &boundary_data,
   const double                               computed_timestep_length)
 {
-  // This is essentially the same as during initialization. We have already all
-  // IDs and just need to convert our obtained data to the preCICE compatible
-  // `write_data` vector. Since we deal here with a unidirectional example,
-  // where the Laplace solver doesn't write any data, we don't need to transform
-  // any data and the following code block is not accessed, i.e.
-  // `precice.hasData()` will return false.
-  // TODO: Should we remove this block here? No data is written, but it would
-  // illustrate the concept.
-  if (precice.hasData(write_data_name, mesh_id))
-    if (precice.isWriteDataRequired(computed_timestep_length))
-      {
-        precice.writeBlockScalarData(write_data_id,
-                                     n_interface_nodes,
-                                     interface_nodes_ids.data(),
-                                     write_data.data());
-      }
-
   // Here, we specify the computed time step length and pass it to preCICE
   precice.advance(computed_timestep_length);
 
   // As a next step, we obtain data, i.e. the boundary condition, from another
   // participant. We have already all IDs and just need to convert our obtained
   // data to the deal.II compatible 'boundary map' , which is done in the
-  // format_deal_to_precice function. All this is of course only done in
-  // case write data is required.
-  if (precice.isReadDataAvailable())
-    {
-      precice.readBlockScalarData(read_data_id,
-                                  n_interface_nodes,
-                                  interface_nodes_ids.data(),
-                                  read_data.data());
+  // format_deal_to_precice function.
+  precice.readBlockScalarData(read_data_id,
+                              n_interface_nodes,
+                              interface_nodes_ids.data(),
+                              read_data.data());
 
-      format_precice_to_deal(boundary_data);
-    }
+  format_precice_to_deal(boundary_data);
 }
 
 
@@ -366,10 +326,10 @@ Adapter<dim, ParameterClass>::format_precice_to_deal(
 // The solver class is essentially the same as in step-4. Comments are added at
 // any point, where the workflow is different due to the coupling.
 template <int dim>
-class LaplaceProblem
+class CoupledLaplaceProblem
 {
 public:
-  LaplaceProblem();
+  CoupledLaplaceProblem();
 
   void
   run();
@@ -455,7 +415,7 @@ BoundaryValues<dim>::value(const Point<dim> &p,
 
 
 template <int dim>
-LaplaceProblem<dim>::LaplaceProblem()
+CoupledLaplaceProblem<dim>::CoupledLaplaceProblem()
   : fe(1)
   , dof_handler(triangulation)
   , interface_boundary_id(1)
@@ -465,7 +425,7 @@ LaplaceProblem<dim>::LaplaceProblem()
 
 template <int dim>
 void
-LaplaceProblem<dim>::make_grid()
+CoupledLaplaceProblem<dim>::make_grid()
 {
   GridGenerator::hyper_cube(triangulation, -1, 1);
   triangulation.refine_global(4);
@@ -490,7 +450,7 @@ LaplaceProblem<dim>::make_grid()
 
 template <int dim>
 void
-LaplaceProblem<dim>::setup_system()
+CoupledLaplaceProblem<dim>::setup_system()
 {
   dof_handler.distribute_dofs(fe);
 
@@ -511,7 +471,7 @@ LaplaceProblem<dim>::setup_system()
 
 template <int dim>
 void
-LaplaceProblem<dim>::assemble_system()
+CoupledLaplaceProblem<dim>::assemble_system()
 {
   // Reset global structures
   system_rhs    = 0;
@@ -592,7 +552,7 @@ LaplaceProblem<dim>::assemble_system()
 
 template <int dim>
 void
-LaplaceProblem<dim>::solve()
+CoupledLaplaceProblem<dim>::solve()
 {
   SolverControl            solver_control(1000, 1e-12);
   SolverCG<Vector<double>> solver(solver_control);
@@ -606,7 +566,7 @@ LaplaceProblem<dim>::solve()
 
 template <int dim>
 void
-LaplaceProblem<dim>::output_results() const
+CoupledLaplaceProblem<dim>::output_results() const
 {
   DataOut<dim> data_out;
 
@@ -623,7 +583,7 @@ LaplaceProblem<dim>::output_results() const
 
 template <int dim>
 void
-LaplaceProblem<dim>::run()
+CoupledLaplaceProblem<dim>::run()
 {
   std::cout << "Solving problem in " << dim << " space dimensions."
             << std::endl;
@@ -635,11 +595,8 @@ LaplaceProblem<dim>::run()
   // of our Adapter.
   adapter.initialize(dof_handler, boundary_data);
 
-  // preCICE steers the coupled simulation completely. The steering is provided
-  // by the function `isCouplingOngoing`, which tells the solver, whether the
-  // time loop has already been finished or not. This tutorial solves 'just' an
-  // explicit coupled stationary problem, so that the return of this statement
-  // is trivial, but it is kept here to illustrate the general concept.
+  // preCICE steers the coupled simulation completely: `isCouplingOngoing` is
+  // used to synchronize the end of the simulation with the coupling partner
   while (adapter.precice.isCouplingOngoing())
     {
       // The time step number is solely used to generate unique output files
@@ -675,7 +632,7 @@ main(int argc, char **argv)
   // turned on I guess.
   Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv, 1);
 
-  LaplaceProblem<2> laplace_problem;
+  CoupledLaplaceProblem<2> laplace_problem;
   laplace_problem.run();
 
   return 0;
