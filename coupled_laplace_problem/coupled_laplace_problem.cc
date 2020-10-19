@@ -141,9 +141,10 @@ Adapter<dim, ParameterClass>::Adapter(
 // and allocates memory) and passes all relevant data to preCICE. For surface
 // coupling, relevant data is especially the location of the data points at the
 // assoociated interface(s). The `boundary_data` is an empty map, which is
-// filled by preCICE, i.e., the information of our dummy participant. Throughout
+// filled by preCICE, i.e., the information of our other participant. Throughout
 // the system assembly, the map can directly be used in order to apply the
-// Dirichlet boundary conditions in the linear system.
+// Dirichlet boundary conditions in the linear system. preCICE returns during
+// the initialization the maximum admissible time-step size.
 template <int dim, typename ParameterClass>
 double
 Adapter<dim, ParameterClass>::initialize(
@@ -255,7 +256,7 @@ Adapter<dim, ParameterClass>::initialize(
 // computation in each time step in the individual solver has finished. Here,
 // coupling data is passed to preCICE and obtained from other participants. In
 // case of the simplified unidirectional coupling, we just obtain data from our
-// dummy participant.
+// c++ participant providing a time-dependent boundary condition.
 template <int dim, typename ParameterClass>
 double
 Adapter<dim, ParameterClass>::advance(
@@ -304,8 +305,9 @@ Adapter<dim, ParameterClass>::format_precice_to_deal(
 }
 
 
-// The solver class is essentially the same as in step-4. Comments are added at
-// any point, where the workflow is different due to the coupling.
+// The solver class is essentially the same as in step-4. We only extend the
+// stationary problem to a time-dependent problem and introduced the coupling.
+// Comments are added at any point, where the workflow is differs from step-4.
 template <int dim>
 class CoupledLaplaceProblem
 {
@@ -340,7 +342,7 @@ private:
 
   // Here, we allocate all structures required for the preCICE coupling. The map
   // is used to apply Dirichlet boundary conditions and filled in the Adapter
-  // class with data from our dummy participant. The CouplingParameters hold the
+  // class with data from our other participant. The CouplingParameters hold the
   // preCICE configuration as described above. The interdace boundary ID is the
   // ID associated to our coupling interface and needs to be specified, when we
   // set up the Adapter class object, because we pass it directly to the
@@ -350,6 +352,7 @@ private:
   const types::boundary_id                  interface_boundary_id;
   Adapter<dim, CouplingParamters>           adapter;
 
+  // The time-step size delta_t and a counter for the time-step number
   double       delta_t   = 0.1;
   unsigned int time_step = 0;
 };
@@ -477,6 +480,8 @@ CoupledLaplaceProblem<dim>::assemble_system()
   FullMatrix<double> cell_matrix(dofs_per_cell, dofs_per_cell);
   Vector<double>     cell_rhs(dofs_per_cell);
   std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
+  // The solution values from previous time steps are stored for each quadrature
+  // point
   std::vector<double> local_values_old_solution(fe_values.n_quadrature_points);
 
   for (const auto &cell : dof_handler.active_cell_iterators())
@@ -484,15 +489,18 @@ CoupledLaplaceProblem<dim>::assemble_system()
       fe_values.reinit(cell);
       cell_matrix = 0;
       cell_rhs    = 0;
+      // Get the local values from the `fe_values' object
       fe_values.get_function_values(old_solution, local_values_old_solution);
 
+      // The system matrix contains additionally a mass matrix due to the time
+      // discretization. The RHS has contributions from the old solution values.
       for (const unsigned int q_index : fe_values.quadrature_point_indices())
         for (const unsigned int i : fe_values.dof_indices())
           {
             for (const unsigned int j : fe_values.dof_indices())
               cell_matrix(i, j) +=
-                ((fe_values.shape_value(i, q_index) *  // val phi_i(x_q)
-                  fe_values.shape_value(j, q_index)) + // val phi_j(x_q)
+                ((fe_values.shape_value(i, q_index) *  // phi_i(x_q)
+                  fe_values.shape_value(j, q_index)) + // phi_j(x_q)
                  (delta_t *                            // delta t
                   fe_values.shape_grad(i, q_index) *   // grad phi_i(x_q)
                   fe_values.shape_grad(j, q_index))) * // grad phi_j(x_q)
@@ -500,14 +508,15 @@ CoupledLaplaceProblem<dim>::assemble_system()
 
             const auto  x_q         = fe_values.quadrature_point(q_index);
             const auto &local_value = local_values_old_solution[q_index];
-            cell_rhs(i) +=
-              ((delta_t *                                         // Delta t
-                fe_values.shape_value(i, q_index) *               // phi_i(x_q)
-                right_hand_side.value(x_q)) +                     // f(x_q)
-               fe_values.shape_value(i, q_index) * local_value) * // val
-              fe_values.JxW(q_index);                             // dx
+            cell_rhs(i) += ((delta_t *                           // delta t
+                             fe_values.shape_value(i, q_index) * // phi_i(x_q)
+                             right_hand_side.value(x_q)) +       // f(x_q)
+                            fe_values.shape_value(i, q_index) *
+                              local_value) *       // phi_i(x_q)*val
+                           fe_values.JxW(q_index); // dx
           }
 
+      // Copy local to global
       cell->get_dof_indices(local_dof_indices);
       for (const unsigned int i : fe_values.dof_indices())
         {
@@ -597,14 +606,14 @@ CoupledLaplaceProblem<dim>::run()
       ++time_step;
       // In the time loop, we assemble the coupled system and solve it, as
       // usual. According to our configuration, we obtained already the data of
-      // our dummy participant during the initialization.
+      // the `fany_boundary_condition` participant during the initialization.
       assemble_system();
       solve();
 
       // After we solved the system, we advance with our system to the next time
       // level. In a coupled simulation, we would pass our calculated data to
       // preCICE and obtain data from other participants. Here, we simply obtain
-      // data from the c++ participant.
+      // data from the other participant.
       delta_t = adapter.advance(boundary_data, delta_t);
 
       // In case our time step has been completed, we write the results to an
