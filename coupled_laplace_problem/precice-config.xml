@@ -22,7 +22,7 @@
         <use-mesh name="dealii-mesh" provide="yes"/>
         <use-mesh name="boundary-mesh" from="boundary-participant"/>
         <read-data name="boundary-data" mesh="dealii-mesh"/>
-        <mapping:rbf-thin-plate-splines direction="read" from="boundary	-mesh" to="dealii-mesh" constraint="consistent" x-dead="true"/>
+        <mapping:rbf-thin-plate-splines direction="read" from="boundary-mesh" to="dealii-mesh" constraint="consistent" x-dead="true"/>
     </participant>
 
     <participant name="boundary-participant">
@@ -33,8 +33,8 @@
     <m2n:sockets from="laplace-solver" to="boundary-participant" />
 
     <coupling-scheme:serial-explicit>
-        <time-window-size value="1"/>
-        <max-time value="10"/>
+        <time-window-size value="0.1"/>
+        <max-time value="1"/>
         <participants first="boundary-participant" second="laplace-solver"/>
         <exchange data="boundary-data" mesh="boundary-mesh" from="boundary-participant" to="laplace-solver"/>
     </coupling-scheme:serial-explicit>

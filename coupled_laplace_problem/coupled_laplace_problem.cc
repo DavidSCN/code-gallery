@@ -47,7 +47,7 @@ struct CouplingParamters
 {
   const std::string config_file      = "precice-config.xml";
   const std::string participant_name = "laplace-solver";
-  const std::string mesh_name        = "original-mesh";
+  const std::string mesh_name        = "dealii-mesh";
   const std::string read_data_name   = "boundary-data";
 };
 
@@ -65,11 +65,11 @@ public:
   Adapter(const ParameterClass &   parameters,
           const types::boundary_id deal_boundary_interface_id);
 
-  void
+  double
   initialize(const DoFHandler<dim> &                    dof_handler,
              std::map<types::global_dof_index, double> &boundary_data);
 
-  void
+  double
   advance(std::map<types::global_dof_index, double> &boundary_data,
           const double                               computed_timestep_length);
 
@@ -145,7 +145,7 @@ Adapter<dim, ParameterClass>::Adapter(
 // the system assembly, the map can directly be used in order to apply the
 // Dirichlet boundary conditions in the linear system.
 template <int dim, typename ParameterClass>
-void
+double
 Adapter<dim, ParameterClass>::initialize(
   const DoFHandler<dim> &                    dof_handler,
   std::map<types::global_dof_index, double> &boundary_data)
@@ -231,7 +231,7 @@ Adapter<dim, ParameterClass>::initialize(
 
   // Then, we initialize preCICE internally calling the API function
   // `initialize()`
-  precice.initialize();
+  const double max_delta_t = precice.initialize();
 
 
   // read initial readData from preCICE if required for the first time step
@@ -246,6 +246,8 @@ Adapter<dim, ParameterClass>::initialize(
       // This is the opposite direction as above. See comment there.
       format_precice_to_deal(boundary_data);
     }
+
+  return max_delta_t;
 }
 
 
@@ -255,13 +257,13 @@ Adapter<dim, ParameterClass>::initialize(
 // case of the simplified unidirectional coupling, we just obtain data from our
 // dummy participant.
 template <int dim, typename ParameterClass>
-void
+double
 Adapter<dim, ParameterClass>::advance(
   std::map<types::global_dof_index, double> &boundary_data,
   const double                               computed_timestep_length)
 {
   // Here, we specify the computed time step length and pass it to preCICE
-  precice.advance(computed_timestep_length);
+  const double max_delta_t = precice.advance(computed_timestep_length);
 
   // As a next step, we obtain data, i.e. the boundary condition, from another
   // participant. We have already all IDs and just need to convert our obtained
@@ -273,6 +275,8 @@ Adapter<dim, ParameterClass>::advance(
                               read_data.data());
 
   format_precice_to_deal(boundary_data);
+
+  return max_delta_t;
 }
 
 
@@ -331,6 +335,7 @@ private:
   SparseMatrix<double> system_matrix;
 
   Vector<double> solution;
+  Vector<double> old_solution;
   Vector<double> system_rhs;
 
   // Here, we allocate all structures required for the preCICE coupling. The map
@@ -345,6 +350,7 @@ private:
   const types::boundary_id                  interface_boundary_id;
   Adapter<dim, CouplingParamters>           adapter;
 
+  double       delta_t   = 0.1;
   unsigned int time_step = 0;
 };
 
@@ -441,6 +447,7 @@ CoupledLaplaceProblem<dim>::setup_system()
   system_matrix.reinit(sparsity_pattern);
 
   solution.reinit(dof_handler.n_dofs());
+  old_solution.reinit(dof_handler.n_dofs());
   system_rhs.reinit(dof_handler.n_dofs());
 }
 
@@ -453,6 +460,8 @@ CoupledLaplaceProblem<dim>::assemble_system()
   // Reset global structures
   system_rhs    = 0;
   system_matrix = 0;
+  // Update old solution values
+  old_solution = solution;
 
   QGauss<dim> quadrature_formula(fe.degree + 1);
 
@@ -467,28 +476,36 @@ CoupledLaplaceProblem<dim>::assemble_system()
 
   FullMatrix<double> cell_matrix(dofs_per_cell, dofs_per_cell);
   Vector<double>     cell_rhs(dofs_per_cell);
-
   std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
+  std::vector<double> local_values_old_solution(fe_values.n_quadrature_points);
 
   for (const auto &cell : dof_handler.active_cell_iterators())
     {
       fe_values.reinit(cell);
       cell_matrix = 0;
       cell_rhs    = 0;
+      fe_values.get_function_values(old_solution, local_values_old_solution);
 
       for (const unsigned int q_index : fe_values.quadrature_point_indices())
         for (const unsigned int i : fe_values.dof_indices())
           {
             for (const unsigned int j : fe_values.dof_indices())
               cell_matrix(i, j) +=
-                (fe_values.shape_grad(i, q_index) * // grad phi_i(x_q)
-                 fe_values.shape_grad(j, q_index) * // grad phi_j(x_q)
-                 fe_values.JxW(q_index));           // dx
+                ((fe_values.shape_value(i, q_index) *  // val phi_i(x_q)
+                  fe_values.shape_value(j, q_index)) + // val phi_j(x_q)
+                 (delta_t *                            // delta t
+                  fe_values.shape_grad(i, q_index) *   // grad phi_i(x_q)
+                  fe_values.shape_grad(j, q_index))) * // grad phi_j(x_q)
+                fe_values.JxW(q_index);                // dx
 
-            const auto x_q = fe_values.quadrature_point(q_index);
-            cell_rhs(i) += (fe_values.shape_value(i, q_index) * // phi_i(x_q)
-                            right_hand_side.value(x_q) *        // f(x_q)
-                            fe_values.JxW(q_index));            // dx
+            const auto  x_q         = fe_values.quadrature_point(q_index);
+            const auto &local_value = local_values_old_solution[q_index];
+            cell_rhs(i) +=
+              ((delta_t *                                         // Delta t
+                fe_values.shape_value(i, q_index) *               // phi_i(x_q)
+                right_hand_side.value(x_q)) +                     // f(x_q)
+               fe_values.shape_value(i, q_index) * local_value) * // val
+              fe_values.JxW(q_index);                             // dx
           }
 
       cell->get_dof_indices(local_dof_indices);
@@ -570,7 +587,7 @@ CoupledLaplaceProblem<dim>::run()
 
   // After we set up out system, we initialize preCICE using the functionalities
   // of our Adapter.
-  adapter.initialize(dof_handler, boundary_data);
+  delta_t = adapter.initialize(dof_handler, boundary_data);
 
   // preCICE steers the coupled simulation completely: `isCouplingOngoing` is
   // used to synchronize the end of the simulation with the coupling partner
@@ -587,10 +604,8 @@ CoupledLaplaceProblem<dim>::run()
       // After we solved the system, we advance with our system to the next time
       // level. In a coupled simulation, we would pass our calculated data to
       // preCICE and obtain data from other participants. Here, we simply obtain
-      // data from the dummy participant. Since we wish to solve a stationary
-      // problem, we set the time-step size equal to the time-window size of the
-      // coupled system, which is 1.
-      adapter.advance(boundary_data, 1);
+      // data from the c++ participant.
+      delta_t = adapter.advance(boundary_data, delta_t);
 
       // In case our time step has been completed, we write the results to an
       // output file.

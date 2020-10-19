@@ -41,6 +41,6 @@ DEAL_II_INVOKE_AUTOPILOT()
 FIND_PACKAGE(precice REQUIRED)
 TARGET_LINK_LIBRARIES(${TARGET} precice::precice)
 
-# In order to build the dummy, the DEAL_II macros are not required
-ADD_EXECUTABLE(dummy dummy.cc)
-TARGET_LINK_LIBRARIES(dummy precice::precice)
+# In order to build the fancy_boundary_condition, the DEAL_II macros are not required
+ADD_EXECUTABLE(fancy_boundary_condition fancy_boundary_condition.cc)
+TARGET_LINK_LIBRARIES(fancy_boundary_condition precice::precice)

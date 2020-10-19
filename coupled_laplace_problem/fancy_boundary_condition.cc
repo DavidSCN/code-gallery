@@ -73,8 +73,8 @@ main()
   double dt = precice.initialize();
 
   // Start time loop
-  double end_time = 10;
-  double time     = -end_time / 2;
+  const double end_time = 1;
+  double       time     = -end_time / 2;
   while (precice.isCouplingOngoing())
     {
       time += dt;
