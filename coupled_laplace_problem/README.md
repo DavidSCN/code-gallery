@@ -55,7 +55,8 @@ in the same directory from another terminal window.
 
 ## Results
 
-TODO: Add some results
+By default, the results are saved in each time step using `vtk` files. A visualization with paraView looks the following way
+![result](./doc/result.gif)
 
 ## Further reading
 
