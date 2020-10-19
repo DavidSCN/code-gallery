@@ -4,8 +4,10 @@
 
 #include "precice/SolverInterface.hpp"
 
+// Function to generate boundary values in each time step
 void
-define_boundary_values(std::vector<double> &boundary_data, double amplitude)
+define_boundary_values(std::vector<double> &boundary_data,
+                       const double         amplitude)
 {
   // Specify the actual data we want to pass to the other participant. Here, we
   // choose a parabola with boundary values 2 in order to enforce continuity
