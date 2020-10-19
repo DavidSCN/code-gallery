@@ -4,6 +4,24 @@ Laplace equation coupled to an external simulation program
 
 preCICE allows to couple deal.II to external simulation software, such as OpenFOAM, SU2, or CalculiX. To keep dependencies of this example minimal we couple deal.II to an external c++ program, which provides a time varying boundary condition. The deal.II code consists mainly of the `step-4` tutorial program, where a simple Laplace problem is solved. Coupling with preCICE is usually carried out along surfaces in order to apply a Dirichlet-Neumann coupling between two domains (volume coupling is also possible). For the sake of simplicity, we couple here one side of our quadrilateral domain unidirectional with a c++ program, which generates a parabolic boundary profile with a time varying amplitude. The boundary values are consequntly used in the Laplace solver as Dirichlet boundary condition.
 
+## Time discretization
+Coupled simulations deal mostly with time-dependent problems. Hence, we modify the stationary Laplace problem from step-4 by a time-dependent problem
+@f{align*}
+  \\frac{\partial u}{\partial t}-Delta u &= f \qquad\qquad & \text{in}\ \Omega,
+  \\
+  u &= x^2+y^2 \qquad\qquad & \text{on}\ \partial\Omega_s,
+  \\
+  u &= g(t) \qquad\qquad & \text{on}\ \partial\Omega_c.
+@f}
+
+The system is consequently discretized by a first-order Euler backward method, resulting in
+
+@f{align*}
+ ((\varphi_i, \varphi_j) + \Delta t (\nabla\varphi_i, \nabla \varphi_j)) u_j^{n+1}
+   = \Delta t (\varphi_j, f) + (\varphi_j,u_j^{n})
+@f}
+
+
 ## Requirements
 
 * Version `9.2` or greater of `deal.II`
@@ -27,9 +45,9 @@ make release
 ```
 This command will generate two executables: one for the `coupled_laplace_problem` and one for the `fancy_boundary_condition` participant.
 ```
-make run
+./coupled_laplace_problem
 ```
-excutes the `coupled_laplace_problem`. In order to run the coupled simulation, execute
+excutes the `coupled_laplace_problem`. In order to start the coupled simulation, execute
 ```
 ./fancy_boundary_condition
 ```
