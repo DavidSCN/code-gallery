@@ -54,8 +54,8 @@ struct CouplingParamters
 
 // @sect4{The Adapter class}
 //
-// The Adapter class handles all functionalities to couple the deal.II solver code
-// to other solvers with preCICE, i.e., data structures are set up and all
+// The Adapter class handles all functionalities to couple the deal.II solver
+// code to other solvers with preCICE, i.e., data structures are set up and all
 // relevant information is passed to preCICE.
 
 template <int dim, typename ParameterClass>
@@ -106,6 +106,13 @@ private:
   std::vector<int>    interface_nodes_ids;
   std::vector<double> read_data;
 
+  // The MPI rank and total number of MPI ranks is required by preCICE when the
+  // Solverinterface is created. Since this tutorial runs only in serial mode we
+  // define the variables manually in this class instead of using the regular
+  // MPI interface.
+  const int this_mpi_process = 0;
+  const int n_mpi_processes  = 1;
+
   // Function to transform the obtained data from preCICE into an appropriate
   // map for Dirichlet boundary conditions
   void
@@ -128,8 +135,8 @@ Adapter<dim, ParameterClass>::Adapter(
   const types::boundary_id deal_boundary_interface_id)
   : precice(parameters.participant_name,
             parameters.config_file,
-            Utilities::MPI::this_mpi_process(MPI_COMM_WORLD),
-            Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD))
+            this_mpi_process,
+            n_mpi_processes)
   , deal_boundary_interface_id(deal_boundary_interface_id)
   , mesh_name(parameters.mesh_name)
   , read_data_name(parameters.read_data_name)
@@ -143,8 +150,8 @@ Adapter<dim, ParameterClass>::Adapter(
 // associated interface(s). The `boundary_data` is an empty map, which is
 // filled by preCICE, i.e., information of the other participant. Throughout
 // the system assembly, the map can directly be used in order to apply the
-// Dirichlet boundary conditions in the linear system. preCICE returns the maximum
-// admissible time-step size during the initialization.
+// Dirichlet boundary conditions in the linear system. preCICE returns the
+// maximum admissible time-step size during the initialization.
 template <int dim, typename ParameterClass>
 double
 Adapter<dim, ParameterClass>::initialize(
@@ -235,7 +242,7 @@ Adapter<dim, ParameterClass>::initialize(
   const double max_delta_t = precice.initialize();
 
 
-  // read first coupling data from preCICE if available (i.e. deal.II is 
+  // read first coupling data from preCICE if available (i.e. deal.II is
   // the second participant in a serial coupling scheme)
   if (precice.isReadDataAvailable())
     {
@@ -608,9 +615,9 @@ CoupledLaplaceProblem<dim>::run()
       solve();
 
       // After we solved the system, we advance the coupling to the next time
-      // level. In a bi-directional coupled simulation, we would pass our calculated data to
-      // and obtain new data from preCICE. Here, we simply obtain
-      // new data from preCICE, so from the other participant.
+      // level. In a bi-directional coupled simulation, we would pass our
+      // calculated data to and obtain new data from preCICE. Here, we simply
+      // obtain new data from preCICE, so from the other participant.
       delta_t = adapter.advance(boundary_data, delta_t);
 
       // Write output file if time step is complete
@@ -622,13 +629,8 @@ CoupledLaplaceProblem<dim>::run()
 
 
 int
-main(int argc, char **argv)
+main()
 {
-  // TODO: Should we keep the MPI dependency here? It makes things more clear in
-  // the initialization of the Adapter, but requires DEAL_II_WITH_MPI to be
-  // turned on I guess.
-  Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv, 1);
-
   CoupledLaplaceProblem<2> laplace_problem;
   laplace_problem.run();
 
