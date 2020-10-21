@@ -110,8 +110,8 @@ private:
   // Solverinterface is created. Since this tutorial runs only in serial mode we
   // define the variables manually in this class instead of using the regular
   // MPI interface.
-  const int this_mpi_process = 0;
-  const int n_mpi_processes  = 1;
+  static constexpr int this_mpi_process = 0;
+  static constexpr int n_mpi_processes  = 1;
 
   // Function to transform the obtained data from preCICE into an appropriate
   // map for Dirichlet boundary conditions

@@ -7,8 +7,13 @@
 // Function to generate boundary values in each time step
 void
 define_boundary_values(std::vector<double> &boundary_data,
-                       const double         amplitude)
+                       const double         time,
+                       const double         end_time)
 {
+  // Scale the current time value
+  const double relative_time = time / end_time;
+  // Define the amplitude. Values run from -0.5 to 0.5
+  const double amplitude = (relative_time - 0.5);
   // Specify the actual data we want to pass to the other participant. Here, we
   // choose a parabola with boundary values 2 in order to enforce continuity
   // to adjacent boundaries.
@@ -21,6 +26,8 @@ define_boundary_values(std::vector<double> &boundary_data,
 int
 main()
 {
+  std::cout << "Boundary participant: starting... \n";
+
   // Adjust to MPI rank and size for parallel computation
   const int commRank = 0;
   const int commSize = 1;
@@ -48,9 +55,9 @@ main()
 
   // Define a boundary mesh
   std::cout << "Boundary participant: defining boundary mesh \n";
-  const double length  = 2;
-  const double x_coord = 1;
-  const double deltaX  = length / (numberOfVertices - 1);
+  const double length = 2;
+  const double xCoord = 1;
+  const double deltaY = length / (numberOfVertices - 1);
   for (int i = 0; i < numberOfVertices; ++i)
     for (int j = 0; j < dimensions; ++j)
       {
@@ -58,13 +65,10 @@ main()
         // The x-coordinate is always 1, i.e., the boundary is parallel to the
         // y-axis. The y-coordinate is descending from 1 to -1.
         if (j == 0)
-          vertices[index] = x_coord;
+          vertices[index] = xCoord;
         else
-          vertices[index] = 1 - deltaX * i;
+          vertices[index] = 1 - deltaY * i;
       }
-
-  // Start with an amplitude of -1
-  define_boundary_values(writeData, -1);
 
   // Pass the vertices to preCICE
   precice.setMeshVertices(meshID,
@@ -77,16 +81,14 @@ main()
 
   // Start time loop
   const double end_time = 1;
-  double       time     = -end_time / 2;
+  double       time     = 0;
   while (precice.isCouplingOngoing())
     {
-      time += dt;
-
       // Generate new boundary data
-      define_boundary_values(writeData, time / (end_time / 2));
+      define_boundary_values(writeData, time, end_time);
 
       {
-        std::cout << "DUMMY: Writing coupling data \n";
+        std::cout << "Boundary participant: writing coupling data \n";
         precice.writeBlockScalarData(dataID,
                                      numberOfVertices,
                                      vertexIDs.data(),
@@ -94,10 +96,12 @@ main()
       }
 
       dt = precice.advance(dt);
-      std::cout << "DUMMY: Advancing in time\n";
+      std::cout << "Boundary participant: advancing in time\n";
+
+      time += dt;
     }
 
-  std::cout << "DUMMY: Closing C++ solver dummy...\n";
+  std::cout << "Boundary participant: closing...\n";
 
   return 0;
 }
