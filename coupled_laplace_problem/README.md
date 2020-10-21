@@ -15,18 +15,17 @@ Coupled simulations deal mostly with time-dependent problems. Hence, we modify t
   \\
   u &= g(t) \qquad\qquad & \text{on}\ \partial\Omega_c.
 @f}
+with the fixed Dirichlet boundary \Omega_s, the coupling boundary \Omega_c and the time-dependent coupling data g(t).
 
 The system is consequently discretized by a first-order backward Euler method, resulting in
-
 @f{align*}
- ((\varphi_i, \varphi_j) + \Delta t (\nabla\varphi_i, \nabla \varphi_j)) u_j^{n+1}
-   = \Delta t (\varphi_j, f) + (\varphi_j,u_j^{n})
+  \\frac{u^{n+1}-u^n}{\Delta t}-\Delta u^{n+1} &= f \qquad\qquad & \text{in}\ \Omega,
 @f}
-
+at the next time level n+1.
 
 ## Requirements
 
-* Version `9.2` or greater of `deal.II`
+* `deal.II`, version `9.2` or greater. Older versions might work as well, but have not been tested.
 
 * [preCICE](https://github.com/precice/precice/wiki#1-get-precice), version `2.0` or greater.
 
