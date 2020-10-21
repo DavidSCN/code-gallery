@@ -54,7 +54,7 @@ struct CouplingParamters
 
 // @sect4{The Adapter class}
 //
-// The Adapter class keeps all functionalities to couple the deal.II solver code
+// The Adapter class handles all functionalities to couple the deal.II solver code
 // to other solvers with preCICE, i.e., data structures are set up and all
 // relevant information is passed to preCICE.
 
@@ -117,7 +117,7 @@ private:
 
 // In the constructor of the Adapter class, we set up the preCICE
 // Solverinterface. Here, we need to tell preCICE our name as participant of the
-// simulation and the name of the preCICE-configuration file. Both have already
+// simulation and the name of the preCICE configuration file. Both have already
 // been specified in the CouplingParameter class above. Thus, we pass the class
 // directly to the constructor and read out all relevant information. As a
 // second parameter, we need to specify the boundary ID of our triangulation,
@@ -140,11 +140,11 @@ Adapter<dim, ParameterClass>::Adapter(
 // This function initializes preCICE (e.g. establishes communication channels
 // and allocates memory) and passes all relevant data to preCICE. For surface
 // coupling, relevant data is especially the location of the data points at the
-// assoociated interface(s). The `boundary_data` is an empty map, which is
-// filled by preCICE, i.e., the information of our other participant. Throughout
+// associated interface(s). The `boundary_data` is an empty map, which is
+// filled by preCICE, i.e., information of the other participant. Throughout
 // the system assembly, the map can directly be used in order to apply the
-// Dirichlet boundary conditions in the linear system. preCICE returns during
-// the initialization the maximum admissible time-step size.
+// Dirichlet boundary conditions in the linear system. preCICE returns the maximum
+// admissible time-step size during the initialization.
 template <int dim, typename ParameterClass>
 double
 Adapter<dim, ParameterClass>::initialize(
@@ -155,7 +155,7 @@ Adapter<dim, ParameterClass>::initialize(
   Assert(dim == precice.getDimensions(),
          ExcDimensionMismatch(dim, precice.getDimensions()));
 
-  // In a first step, we get precice specific IDs from precice and store them in
+  // In a first step, we get preCICE specific IDs from preCICE and store them in
   // the respective variables. Later, they are used for data transfer.
   mesh_id      = precice.getMeshID(mesh_name);
   read_data_id = precice.getDataID(read_data_name, mesh_id);
@@ -235,8 +235,8 @@ Adapter<dim, ParameterClass>::initialize(
   const double max_delta_t = precice.initialize();
 
 
-  // read initial readData from preCICE if required for the first time step
-  // FIXME: Data is already exchanged here
+  // read first coupling data from preCICE if available (i.e. deal.II is 
+  // the second participant in a serial coupling scheme)
   if (precice.isReadDataAvailable())
     {
       precice.readBlockScalarData(read_data_id,
@@ -253,10 +253,8 @@ Adapter<dim, ParameterClass>::initialize(
 
 
 // The function `advance()` is called in the main time loop after the
-// computation in each time step in the individual solver has finished. Here,
-// coupling data is passed to preCICE and obtained from other participants. In
-// case of the simplified unidirectional coupling, we just obtain data from our
-// c++ participant providing a time-dependent boundary condition.
+// computation in each time step. Here,
+// coupling data is passed to and obtained from preCICE.
 template <int dim, typename ParameterClass>
 double
 Adapter<dim, ParameterClass>::advance(
@@ -293,7 +291,7 @@ void
 Adapter<dim, ParameterClass>::format_precice_to_deal(
   std::map<types::global_dof_index, double> &boundary_data) const
 {
-  // We stored already the coupling DoF indices in the `boundary_data` map, so
+  // We already stored the coupling DoF indices in the `boundary_data` map, so
   // that we can simply iterate over all keys in the map.
   auto dof_component = boundary_data.begin();
   for (int i = 0; i < n_interface_nodes; ++i)
@@ -307,7 +305,7 @@ Adapter<dim, ParameterClass>::format_precice_to_deal(
 
 // The solver class is essentially the same as in step-4. We only extend the
 // stationary problem to a time-dependent problem and introduced the coupling.
-// Comments are added at any point, where the workflow is differs from step-4.
+// Comments are added at any point, where the workflow differs from step-4.
 template <int dim>
 class CoupledLaplaceProblem
 {
@@ -340,9 +338,9 @@ private:
   Vector<double> old_solution;
   Vector<double> system_rhs;
 
-  // Here, we allocate all structures required for the preCICE coupling. The map
+  // We allocate all structures required for the preCICE coupling. The map
   // is used to apply Dirichlet boundary conditions and filled in the Adapter
-  // class with data from our other participant. The CouplingParameters hold the
+  // class with data from the other participant. The CouplingParameters hold the
   // preCICE configuration as described above. The interdace boundary ID is the
   // ID associated to our coupling interface and needs to be specified, when we
   // set up the Adapter class object, because we pass it directly to the
@@ -421,7 +419,7 @@ CoupledLaplaceProblem<dim>::make_grid()
       {
         const auto face = cell->face(f);
 
-        // We choose (arbitrarily) the boundary in positive x direction for the
+        // We choose the boundary in positive x direction for the
         // interface coupling.
         if (face->at_boundary() && (face->center()[0] == 1))
           face->set_boundary_id(interface_boundary_id);
@@ -594,30 +592,28 @@ CoupledLaplaceProblem<dim>::run()
   make_grid();
   setup_system();
 
-  // After we set up out system, we initialize preCICE using the functionalities
-  // of our Adapter.
+  // After we set up the system, we initialize preCICE using the functionalities
+  // of the Adapter.
   delta_t = adapter.initialize(dof_handler, boundary_data);
 
-  // preCICE steers the coupled simulation completely: `isCouplingOngoing` is
+  // preCICE steers the coupled simulation: `isCouplingOngoing` is
   // used to synchronize the end of the simulation with the coupling partner
   while (adapter.precice.isCouplingOngoing())
     {
       // The time step number is solely used to generate unique output files
       ++time_step;
-      // In the time loop, we assemble the coupled system and solve it, as
-      // usual. According to our configuration, we obtained already the data of
-      // the `fany_boundary_condition` participant during the initialization.
+      // In the time loop, we assemble the coupled system and solve it as
+      // usual.
       assemble_system();
       solve();
 
-      // After we solved the system, we advance with our system to the next time
-      // level. In a coupled simulation, we would pass our calculated data to
-      // preCICE and obtain data from other participants. Here, we simply obtain
-      // data from the other participant.
+      // After we solved the system, we advance the coupling to the next time
+      // level. In a bi-directional coupled simulation, we would pass our calculated data to
+      // and obtain new data from preCICE. Here, we simply obtain
+      // new data from preCICE, so from the other participant.
       delta_t = adapter.advance(boundary_data, delta_t);
 
-      // In case our time step has been completed, we write the results to an
-      // output file.
+      // Write output file if time step is complete
       if (adapter.precice.isTimeWindowComplete())
         output_results();
     }

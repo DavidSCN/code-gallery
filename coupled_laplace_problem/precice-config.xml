@@ -8,14 +8,14 @@
 
     <solver-interface dimensions="2">
 
-   <data:scalar name="boundary-data"/>
+    <data:scalar name="boundary-data"/>
 
     <mesh name="dealii-mesh">
         <use-data name="boundary-data"/>
     </mesh>
 
     <mesh name="boundary-mesh">
-    <use-data name="boundary-data"/>
+        <use-data name="boundary-data"/>
     </mesh>
 
     <participant name="laplace-solver">

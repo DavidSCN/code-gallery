@@ -47,6 +47,7 @@ main()
   std::vector<double> vertices(numberOfVertices * dimensions);
 
   // Define a boundary mesh
+  std::cout << "Boundary participant: defining boundary mesh \n";
   const double length  = 2;
   const double x_coord = 1;
   const double deltaX  = length / (numberOfVertices - 1);
